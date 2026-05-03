@@ -1,6 +1,11 @@
 ## 📝 Summary
 <!-- Provide a brief overview of the purpose of this PR. -->
 
+## 🔗 Reference
+
+<!-- List the issue being resolved or related issues. -->
+resolves #
+
 ## 🛠 Changes
 
 <!-- List the specific changes implemented in this PR. -->
