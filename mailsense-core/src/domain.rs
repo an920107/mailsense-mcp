@@ -11,7 +11,8 @@ pub struct EmailMessage {
     pub date: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, sqlx::Type)]
+#[sqlx(type_name = "text", rename_all = "PascalCase")]
 pub enum TaskStatus {
     Pending,
     InProgress,
