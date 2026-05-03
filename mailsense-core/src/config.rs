@@ -6,6 +6,7 @@ pub struct Config {
     pub database_url: String,
     pub log_level: String,
     pub imap: ImapConfig,
+    pub gemini: GeminiConfig,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -15,6 +16,13 @@ pub struct ImapConfig {
     pub username: String,
     pub password: String,
     pub tls_enabled: bool,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct GeminiConfig {
+    pub api_key: String,
+    pub model: String,
+    pub base_url: String,
 }
 
 impl Config {
@@ -44,10 +52,19 @@ impl Config {
                 .context("IMAP_TLS_ENABLED must be true or false")?,
         };
 
+        let gemini = GeminiConfig {
+            api_key: std::env::var("GEMINI_API_KEY").context("GEMINI_API_KEY must be set")?,
+            model: std::env::var("GEMINI_MODEL")
+                .unwrap_or_else(|_| "gemini-2.0-flash".to_string()),
+            base_url: std::env::var("GEMINI_BASE_URL")
+                .unwrap_or_else(|_| "https://generativelanguage.googleapis.com".to_string()),
+        };
+
         Ok(Self {
             database_url,
             log_level,
             imap,
+            gemini,
         })
     }
 
@@ -77,10 +94,21 @@ impl Config {
                 .context("IMAP_TLS_ENABLED must be true or false")?,
         };
 
+        let gemini = GeminiConfig {
+            api_key: map.get("GEMINI_API_KEY").cloned().context("GEMINI_API_KEY must be set")?,
+            model: map.get("GEMINI_MODEL")
+                .cloned()
+                .unwrap_or_else(|| "gemini-2.0-flash".to_string()),
+            base_url: map.get("GEMINI_BASE_URL")
+                .cloned()
+                .unwrap_or_else(|| "https://generativelanguage.googleapis.com".to_string()),
+        };
+
         Ok(Self {
             database_url,
             log_level,
             imap,
+            gemini,
         })
     }
 }
@@ -100,6 +128,9 @@ mod tests {
         map.insert("IMAP_USERNAME".to_string(), "user".to_string());
         map.insert("IMAP_PASSWORD".to_string(), "pass".to_string());
         map.insert("IMAP_TLS_ENABLED".to_string(), "true".to_string());
+        map.insert("GEMINI_API_KEY".to_string(), "gemini-key".to_string());
+        map.insert("GEMINI_MODEL".to_string(), "gemini-1.5-pro".to_string());
+        map.insert("GEMINI_BASE_URL".to_string(), "https://example.com".to_string());
 
         let config = Config::from_map(map).expect("Failed to load config");
         assert_eq!(config.database_url, "postgres://test:test@localhost/test");
@@ -109,5 +140,8 @@ mod tests {
         assert_eq!(config.imap.username, "user");
         assert_eq!(config.imap.password, "pass");
         assert!(config.imap.tls_enabled);
+        assert_eq!(config.gemini.api_key, "gemini-key");
+        assert_eq!(config.gemini.model, "gemini-1.5-pro");
+        assert_eq!(config.gemini.base_url, "https://example.com");
     }
 }
