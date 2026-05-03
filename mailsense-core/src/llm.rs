@@ -26,8 +26,8 @@ impl GeminiClient {
 impl LlmProvider for GeminiClient {
     async fn analyze_email(&self, email: &EmailMessage) -> anyhow::Result<EmailAnalysis> {
         let url = format!(
-            "{}/v1beta/models/{}:generateContent?key={}",
-            self.base_url, self.model, self.api_key
+            "{}/v1beta/models/{}:generateContent",
+            self.base_url, self.model
         );
 
         let prompt = format!(
@@ -68,6 +68,7 @@ impl LlmProvider for GeminiClient {
         });
 
         let response = self.client.post(&url)
+            .header("x-goog-api-key", &self.api_key)
             .json(&body)
             .send()
             .await?;
@@ -115,7 +116,8 @@ mod tests {
             }]
         });
 
-        let mock = server.mock("POST", "/v1beta/models/gemini-2.0-flash:generateContent?key=test-key")
+        let mock = server.mock("POST", "/v1beta/models/gemini-2.0-flash:generateContent")
+            .match_header("x-goog-api-key", "test-key")
             .with_status(200)
             .with_header("content-type", "application/json")
             .with_body(serde_json::to_string(&mock_body).unwrap())
