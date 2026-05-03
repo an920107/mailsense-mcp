@@ -33,6 +33,11 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 # Configuration
 dotenvy = "0.15"
 
+# Database
+sqlx = { version = "0.8", features = ["postgres", "runtime-tokio-native-tls", "macros", "chrono", "uuid", "json", "migrate"] }
+uuid = { version = "1.8", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+
 # IMAP & Email Parsing
 async-imap = { version = "0.11", default-features = false, features = ["runtime-tokio"] }
 futures = "0.3"
