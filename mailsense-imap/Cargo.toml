@@ -1,0 +1,13 @@
+[package]
+name = "mailsense-imap"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+mailsense-core = { workspace = true }

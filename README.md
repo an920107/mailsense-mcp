@@ -28,8 +28,8 @@ This project strictly adheres to asynchronous Rust best practices and modular de
 *   **Async Runtime**: `tokio`
 *   **Protocol**: Model Context Protocol (MCP) via `stdio` or `SSE`.
 *   **IMAP & Parsing**: `async-imap`, `mail-parser`
-*   **Database / State**: SQLite (for idempotency and structured metadata)
-*   **Vector Search**: Qdrant (or SQLite with FTS5/Vector extensions)
+*   **Database / State**: PostgreSQL (Sole Database)
+*   **Vector Search**: Qdrant (for semantic search)
 *   **LLM Integration**: Generic provider interface supporting OpenAI, Anthropic, or Local LLMs via Ollama (for strict privacy).
 
 ### Workspace Structure (Sub-crates)
