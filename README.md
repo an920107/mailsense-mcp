@@ -84,9 +84,11 @@ you **MUST** read and adhere to the guidelines specified in
 - **Rust**: Version 1.75 or higher (Edition 2024 recommended).
 - **PostgreSQL**: A running instance is required for local state storage.
 - **SQLx CLI**: Required for database migrations and query preparation.
+- **Markdown Lint**: Required for documentation quality checks.
 
 ```bash
 cargo install sqlx-cli --no-default-features --features postgres
+sudo pacman -S markdownlint
 ```
 
 ### Local Setup

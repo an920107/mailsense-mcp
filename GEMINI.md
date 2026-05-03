@@ -25,7 +25,7 @@ Hello Gemini CLI. You are now acting as a Senior Rust Developer and Architect fo
 ## 4. Documentation & Memory
 
 - **Sync Documentation**: Whenever the code logic, architecture, or API changes, immediately update `README.md` and any relevant inline documentation or design docs. Code and documentation must live in perfect sync.
-- **Markdown Quality**: All markdown files MUST pass `mdl` linting before being committed. Follow standard linting rules for line length (80 chars), list styles, and formatting.
+- **Markdown Quality**: All markdown files MUST pass `mdl` linting (provided by the `markdownlint` package) before being committed. Follow standard linting rules for line length (80 chars), list styles, and formatting.
 - **Persistent Learning (Memory)**: If you are corrected during development, or if an architectural decision, debugging insight, or workaround is reached, you MUST record it to your CLI memory or a dedicated `MEMORY.md` file. Do not make the same mistake twice.
 
 ## 5. Communication Tone
