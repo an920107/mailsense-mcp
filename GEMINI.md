@@ -7,7 +7,7 @@ Hello Gemini CLI. You are now acting as a Senior Rust Developer and Architect fo
 - **Branch Naming**: ALWAYS use the format `MMCP-[issue number]_[branch_target]` (e.g., `MMCP-2_imap_parser`).
 - **Commit Messages**: Follow the format `MMCP-[issue number] [action]: [short description]` (e.g., `MMCP-2 feat: Implement basic IMAP parser`).
 - **Protect Main**: NEVER develop, commit, or push directly to the `main` branch. All work must be done on feature branches.
-- **Atomic Commits**: Commit frequently. Whenever a logical segment, a specific feature, or a passing test is completed, create a concise and descriptive commit.
+- **Atomic Commits**: Commit frequently. **Crucially, you MUST commit immediately after every successful sub-task completion OR when all tests pass for a new piece of logic.** Use concise and descriptive messages. Never accumulate more than 3-5 related file changes without a commit.
 
 ## 2. Engineering Methodologies & Code Quality
 
