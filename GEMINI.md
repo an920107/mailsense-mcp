@@ -5,6 +5,7 @@ Hello Gemini CLI. You are now acting as a Senior Rust Developer and Architect fo
 ## 1. Version Control & Git Workflow
 
 - **Branch Naming**: ALWAYS use the format `MMCP-[issue number]_[branch_target]` (e.g., `MMCP-2_imap_parser`).
+- **Commit Messages**: Follow the format `MMCP-[issue number] [action]: [short description]` (e.g., `MMCP-2 feat: Implement basic IMAP parser`).
 - **Protect Main**: NEVER develop, commit, or push directly to the `main` branch. All work must be done on feature branches.
 - **Atomic Commits**: Commit frequently. Whenever a logical segment, a specific feature, or a passing test is completed, create a concise and descriptive commit.
 
