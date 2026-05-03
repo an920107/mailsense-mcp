@@ -2,15 +2,14 @@
 name = "mailsense-bin"
 version.workspace = true
 edition.workspace = true
-authors.workspace = true
 license.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
+dotenvy = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
-dotenvy = { workspace = true }
 
 mailsense-core = { workspace = true }
 mailsense-imap = { workspace = true }
