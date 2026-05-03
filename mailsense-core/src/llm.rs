@@ -12,19 +12,13 @@ pub struct GeminiClient {
 }
 
 impl GeminiClient {
-    pub fn new(api_key: String, model: Option<String>) -> Self {
+    pub fn new(api_key: String, model: Option<String>, base_url: Option<String>) -> Self {
         Self {
             api_key,
             model: model.unwrap_or_else(|| "gemini-2.0-flash".to_string()),
             client: Client::new(),
-            base_url: "https://generativelanguage.googleapis.com".to_string(),
+            base_url: base_url.unwrap_or_else(|| "https://generativelanguage.googleapis.com".to_string()),
         }
-    }
-
-    #[cfg(test)]
-    pub fn with_base_url(mut self, url: String) -> Self {
-        self.base_url = url;
-        self
     }
 }
 
@@ -128,8 +122,7 @@ mod tests {
             .create_async()
             .await;
 
-        let client = GeminiClient::new("test-key".to_string(), None)
-            .with_base_url(url);
+        let client = GeminiClient::new("test-key".to_string(), None, Some(url));
 
         let email = EmailMessage {
             subject: "Overdue Invoice".to_string(),
