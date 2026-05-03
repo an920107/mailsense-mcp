@@ -1,7 +1,5 @@
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     #[test]
     fn test_email_parsing() {
         let raw_email = b"From: Alice <alice@example.com>\r\n\
