@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS processed_emails (
 CREATE TABLE IF NOT EXISTS tasks (
     id UUID PRIMARY KEY,
     task_type TEXT NOT NULL,
-    status TEXT NOT NULL, -- Pending, InProgress, Completed, Failed
+    status TEXT NOT NULL CHECK (status IN ('Pending', 'InProgress', 'Completed', 'Failed')),
     payload JSONB NOT NULL DEFAULT '{}',
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()

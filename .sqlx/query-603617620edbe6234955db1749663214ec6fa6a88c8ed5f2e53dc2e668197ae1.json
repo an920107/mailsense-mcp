@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            UPDATE tasks\n            SET status = 'InProgress', updated_at = NOW()\n            WHERE id = (\n                SELECT id FROM tasks\n                WHERE status = 'Pending'\n                ORDER BY created_at ASC\n                LIMIT 1\n                FOR UPDATE SKIP LOCKED\n            )\n            RETURNING id, task_type, status as \"status: TaskStatus\", payload, created_at, updated_at\n            ",
+  "query": "\n            INSERT INTO tasks (id, task_type, status, payload, created_at, updated_at)\n            VALUES ($1, $2, $3, $4, $5, $6)\n            RETURNING id, task_type, status, payload, created_at, updated_at\n            ",
   "describe": {
     "columns": [
       {
@@ -15,7 +15,7 @@
       },
       {
         "ordinal": 2,
-        "name": "status: TaskStatus",
+        "name": "status",
         "type_info": "Text"
       },
       {
@@ -35,7 +35,14 @@
       }
     ],
     "parameters": {
-      "Left": []
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Jsonb",
+        "Timestamptz",
+        "Timestamptz"
+      ]
     },
     "nullable": [
       false,
@@ -46,5 +53,5 @@
       false
     ]
   },
-  "hash": "573a3bfb593ce23bb43620330e1a84307c1139465c91d10874c91a65ff899283"
+  "hash": "603617620edbe6234955db1749663214ec6fa6a88c8ed5f2e53dc2e668197ae1"
 }

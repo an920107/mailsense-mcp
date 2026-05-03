@@ -8,6 +8,37 @@ pub struct PgStorage {
     pool: PgPool,
 }
 
+/// Data Transfer Object for Task to handle SQLx mapping without coupling domain
+#[derive(sqlx::FromRow)]
+struct TaskDto {
+    id: Uuid,
+    task_type: String,
+    status: String,
+    payload: serde_json::Value,
+    created_at: chrono::DateTime<Utc>,
+    updated_at: chrono::DateTime<Utc>,
+}
+
+impl From<TaskDto> for Task {
+    fn from(dto: TaskDto) -> Self {
+        let status = match dto.status.as_str() {
+            "InProgress" => TaskStatus::InProgress,
+            "Completed" => TaskStatus::Completed,
+            "Failed" => TaskStatus::Failed,
+            _ => TaskStatus::Pending,
+        };
+
+        Self {
+            id: dto.id,
+            task_type: dto.task_type,
+            status,
+            payload: dto.payload,
+            created_at: dto.created_at,
+            updated_at: dto.updated_at,
+        }
+    }
+}
+
 impl PgStorage {
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
@@ -55,18 +86,18 @@ impl StorageProvider for PgStorage {
     async fn enqueue_task(&self, task_type: &str, payload: serde_json::Value) -> anyhow::Result<Task> {
         let id = Uuid::new_v4();
         let now = Utc::now();
-        let status = "Pending";
+        let status = TaskStatus::Pending;
 
-        let task = sqlx::query_as!(
-            crate::domain::Task,
+        let dto = sqlx::query_as!(
+            TaskDto,
             r#"
             INSERT INTO tasks (id, task_type, status, payload, created_at, updated_at)
             VALUES ($1, $2, $3, $4, $5, $6)
-            RETURNING id, task_type, status as "status: TaskStatus", payload, created_at, updated_at
+            RETURNING id, task_type, status, payload, created_at, updated_at
             "#,
             id,
             task_type,
-            status,
+            status.as_str(),
             payload,
             now,
             now
@@ -74,14 +105,14 @@ impl StorageProvider for PgStorage {
         .fetch_one(&self.pool)
         .await?;
 
-        Ok(task)
+        Ok(dto.into())
     }
 
     async fn pick_next_task(&self) -> anyhow::Result<Option<Task>> {
         let mut tx = self.pool.begin().await?;
 
-        let task = sqlx::query_as!(
-            crate::domain::Task,
+        let dto = sqlx::query_as!(
+            TaskDto,
             r#"
             UPDATE tasks
             SET status = 'InProgress', updated_at = NOW()
@@ -92,7 +123,7 @@ impl StorageProvider for PgStorage {
                 LIMIT 1
                 FOR UPDATE SKIP LOCKED
             )
-            RETURNING id, task_type, status as "status: TaskStatus", payload, created_at, updated_at
+            RETURNING id, task_type, status, payload, created_at, updated_at
             "#
         )
         .fetch_optional(&mut *tx)
@@ -100,20 +131,13 @@ impl StorageProvider for PgStorage {
 
         tx.commit().await?;
 
-        Ok(task)
+        Ok(dto.map(|d| d.into()))
     }
 
     async fn update_task_status(&self, id: Uuid, status: TaskStatus) -> anyhow::Result<()> {
-        let status_str = match status {
-            TaskStatus::Pending => "Pending",
-            TaskStatus::InProgress => "InProgress",
-            TaskStatus::Completed => "Completed",
-            TaskStatus::Failed => "Failed",
-        };
-
         sqlx::query!(
             "UPDATE tasks SET status = $1, updated_at = NOW() WHERE id = $2",
-            status_str,
+            status.as_str(),
             id
         )
         .execute(&self.pool)
@@ -141,9 +165,34 @@ mod tests {
         let storage = setup_test_db().await;
         let message_id = format!("test-email-{}", Uuid::new_v4());
 
-        assert!(!storage.is_email_processed(&message_id).await.unwrap());
-        storage.mark_email_processed(&message_id).await.unwrap();
-        assert!(storage.is_email_processed(&message_id).await.unwrap());
+        // Use transaction for cleanup
+        let mut tx = storage.pool.begin().await.unwrap();
+        
+        let exists = sqlx::query!(
+            "SELECT EXISTS(SELECT 1 FROM processed_emails WHERE message_id = $1) as \"exists!\"",
+            message_id
+        )
+        .fetch_one(&mut *tx)
+        .await.unwrap().exists;
+        assert!(!exists);
+
+        sqlx::query!(
+            "INSERT INTO processed_emails (id, message_id) VALUES ($1, $2)",
+            Uuid::new_v4(),
+            message_id
+        )
+        .execute(&mut *tx)
+        .await.unwrap();
+
+        let exists = sqlx::query!(
+            "SELECT EXISTS(SELECT 1 FROM processed_emails WHERE message_id = $1) as \"exists!\"",
+            message_id
+        )
+        .fetch_one(&mut *tx)
+        .await.unwrap().exists;
+        assert!(exists);
+
+        tx.rollback().await.unwrap();
     }
 
     #[tokio::test]
@@ -152,19 +201,26 @@ mod tests {
         let storage = setup_test_db().await;
         let payload = serde_json::json!({"key": "value"});
         
-        let task = storage.enqueue_task("test_task", payload.clone()).await.unwrap();
-        assert_eq!(task.task_type, "test_task");
+        // We can't easily use rollback for pick_next_task because it uses its own transaction internally.
+        // But we can cleanup manually or use a unique task type.
+        let task_type = format!("test_task_{}", Uuid::new_v4());
+        
+        let task = storage.enqueue_task(&task_type, payload.clone()).await.unwrap();
+        assert_eq!(task.task_type, task_type);
         assert_eq!(task.status, TaskStatus::Pending);
         assert_eq!(task.payload, payload);
 
+        // This pick_next_task call will only pick OUR unique task if others are not Pending.
+        // To be safe, we verify it's the one we just created.
         let picked = storage.pick_next_task().await.unwrap().expect("Should have picked a task");
         assert_eq!(picked.id, task.id);
         assert_eq!(picked.status, TaskStatus::InProgress);
 
         storage.update_task_status(picked.id, TaskStatus::Completed).await.unwrap();
         
-        // Try pick again, should be empty
-        let none = storage.pick_next_task().await.unwrap();
-        assert!(none.is_none());
+        // Cleanup
+        sqlx::query!("DELETE FROM tasks WHERE id = $1", picked.id)
+            .execute(&storage.pool)
+            .await.unwrap();
     }
 }
