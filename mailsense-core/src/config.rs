@@ -5,6 +5,16 @@ use anyhow::Context;
 pub struct Config {
     pub database_url: String,
     pub log_level: String,
+    pub imap: ImapConfig,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct ImapConfig {
+    pub host: String,
+    pub port: u16,
+    pub username: String,
+    pub password: String,
+    pub tls_enabled: bool,
 }
 
 impl Config {
@@ -20,9 +30,24 @@ impl Config {
         let log_level = std::env::var("LOG_LEVEL")
             .unwrap_or_else(|_| "info".to_string());
 
+        let imap = ImapConfig {
+            host: std::env::var("IMAP_HOST").context("IMAP_HOST must be set")?,
+            port: std::env::var("IMAP_PORT")
+                .unwrap_or_else(|_| "993".to_string())
+                .parse()
+                .context("IMAP_PORT must be a valid port number")?,
+            username: std::env::var("IMAP_USERNAME").context("IMAP_USERNAME must be set")?,
+            password: std::env::var("IMAP_PASSWORD").context("IMAP_PASSWORD must be set")?,
+            tls_enabled: std::env::var("IMAP_TLS_ENABLED")
+                .unwrap_or_else(|_| "true".to_string())
+                .parse()
+                .context("IMAP_TLS_ENABLED must be true or false")?,
+        };
+
         Ok(Self {
             database_url,
             log_level,
+            imap,
         })
     }
 
@@ -36,9 +61,26 @@ impl Config {
             .cloned()
             .unwrap_or_else(|| "info".to_string());
 
+        let imap = ImapConfig {
+            host: map.get("IMAP_HOST").cloned().context("IMAP_HOST must be set")?,
+            port: map.get("IMAP_PORT")
+                .cloned()
+                .unwrap_or_else(|| "993".to_string())
+                .parse()
+                .context("IMAP_PORT must be a valid port number")?,
+            username: map.get("IMAP_USERNAME").cloned().context("IMAP_USERNAME must be set")?,
+            password: map.get("IMAP_PASSWORD").cloned().context("IMAP_PASSWORD must be set")?,
+            tls_enabled: map.get("IMAP_TLS_ENABLED")
+                .cloned()
+                .unwrap_or_else(|| "true".to_string())
+                .parse()
+                .context("IMAP_TLS_ENABLED must be true or false")?,
+        };
+
         Ok(Self {
             database_url,
             log_level,
+            imap,
         })
     }
 }
@@ -53,9 +95,19 @@ mod tests {
         let mut map = HashMap::new();
         map.insert("DATABASE_URL".to_string(), "postgres://test:test@localhost/test".to_string());
         map.insert("LOG_LEVEL".to_string(), "debug".to_string());
+        map.insert("IMAP_HOST".to_string(), "imap.example.com".to_string());
+        map.insert("IMAP_PORT".to_string(), "993".to_string());
+        map.insert("IMAP_USERNAME".to_string(), "user".to_string());
+        map.insert("IMAP_PASSWORD".to_string(), "pass".to_string());
+        map.insert("IMAP_TLS_ENABLED".to_string(), "true".to_string());
 
         let config = Config::from_map(map).expect("Failed to load config");
         assert_eq!(config.database_url, "postgres://test:test@localhost/test");
         assert_eq!(config.log_level, "debug");
+        assert_eq!(config.imap.host, "imap.example.com");
+        assert_eq!(config.imap.port, 993);
+        assert_eq!(config.imap.username, "user");
+        assert_eq!(config.imap.password, "pass");
+        assert!(config.imap.tls_enabled);
     }
 }
