@@ -17,3 +17,6 @@ tokio = { workspace = true }
 tokio-native-tls = { workspace = true }
 tokio-util = { workspace = true }
 tracing = { workspace = true }
+
+[dev-dependencies]
+tracing-subscriber = { workspace = true }

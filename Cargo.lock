@@ -545,6 +545,7 @@ dependencies = [
  "tokio-native-tls",
  "tokio-util",
  "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
