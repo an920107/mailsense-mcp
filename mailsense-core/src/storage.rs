@@ -122,3 +122,49 @@ impl StorageProvider for PgStorage {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    async fn setup_test_db() -> PgStorage {
+        dotenvy::dotenv().ok();
+        let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set for tests");
+        let storage = PgStorage::connect(&database_url).await.expect("Failed to connect to test DB");
+        storage.run_migrations().await.expect("Failed to run migrations");
+        storage
+    }
+
+    #[tokio::test]
+    #[ignore] // Requires a running Postgres DB
+    async fn test_processed_email_tracking() {
+        let storage = setup_test_db().await;
+        let message_id = format!("test-email-{}", Uuid::new_v4());
+
+        assert!(!storage.is_email_processed(&message_id).await.unwrap());
+        storage.mark_email_processed(&message_id).await.unwrap();
+        assert!(storage.is_email_processed(&message_id).await.unwrap());
+    }
+
+    #[tokio::test]
+    #[ignore] // Requires a running Postgres DB
+    async fn test_task_queue_flow() {
+        let storage = setup_test_db().await;
+        let payload = serde_json::json!({"key": "value"});
+        
+        let task = storage.enqueue_task("test_task", payload.clone()).await.unwrap();
+        assert_eq!(task.task_type, "test_task");
+        assert_eq!(task.status, TaskStatus::Pending);
+        assert_eq!(task.payload, payload);
+
+        let picked = storage.pick_next_task().await.unwrap().expect("Should have picked a task");
+        assert_eq!(picked.id, task.id);
+        assert_eq!(picked.status, TaskStatus::InProgress);
+
+        storage.update_task_status(picked.id, TaskStatus::Completed).await.unwrap();
+        
+        // Try pick again, should be empty
+        let none = storage.pick_next_task().await.unwrap();
+        assert!(none.is_none());
+    }
+}
