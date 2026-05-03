@@ -1,22 +1,22 @@
 [workspace]
-members = [
-    "mailsense-core",
-    "mailsense-imap",
-    "mailsense-mcp",
-    "mailsense-bin",
-]
 resolver = "2"
+members = [
+  "mailsense-bin",
+  "mailsense-core",
+  "mailsense-imap",
+  "mailsense-mcp",
+]
 
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
-authors = ["SquidSpirit"]
-license = "GPL-3.0-only"
+license = "GPL-3.0-or-later"
 
 [workspace.dependencies]
+async-trait = "0.1"
 # Async runtime
 tokio = { version = "1.37", features = ["full"] }
-async-trait = "0.1"
+tokio-util = { version = "0.7", features = ["compat"] }
 
 # Error handling
 anyhow = "1.0"
@@ -32,6 +32,13 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 # Configuration
 dotenvy = "0.15"
+
+# IMAP & Email Parsing
+async-imap = { version = "0.11", default-features = false, features = ["runtime-tokio"] }
+futures = "0.3"
+mail-parser = "0.9"
+native-tls = "0.2"
+tokio-native-tls = "0.3"
 
 # Local crates
 mailsense-core = { path = "mailsense-core" }

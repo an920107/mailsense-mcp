@@ -2,12 +2,18 @@
 name = "mailsense-imap"
 version.workspace = true
 edition.workspace = true
-authors.workspace = true
 license.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
+async-imap = { workspace = true }
+async-trait = { workspace = true }
+futures = { workspace = true }
+mail-parser = { workspace = true }
+mailsense-core = { workspace = true }
+native-tls = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
+tokio-native-tls = { workspace = true }
+tokio-util = { workspace = true }
 tracing = { workspace = true }
-mailsense-core = { workspace = true }
