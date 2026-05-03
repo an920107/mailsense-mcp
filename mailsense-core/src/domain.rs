@@ -75,3 +75,25 @@ pub trait StorageProvider: Send + Sync {
     /// Update the status of a task.
     async fn update_task_status(&self, id: Uuid, status: TaskStatus) -> anyhow::Result<()>;
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum EmailIntent {
+    ActionRequired,
+    FYI,
+    Update,
+    Spam,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EmailAnalysis {
+    pub intent: EmailIntent,
+    pub tags: Vec<String>,
+    pub summary: String,
+    pub extracted_deadlines: Vec<DateTime<Utc>>,
+}
+
+#[async_trait]
+pub trait LlmProvider: Send + Sync {
+    /// Analyzes an email to categorize it, summarize it, and extract potential deadlines.
+    async fn analyze_email(&self, email: &EmailMessage) -> anyhow::Result<EmailAnalysis>;
+}
