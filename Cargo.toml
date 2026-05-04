@@ -45,6 +45,7 @@ chrono = { version = "0.4", features = ["serde"] }
 async-imap = { version = "0.11", default-features = false, features = ["runtime-tokio"] }
 futures = "0.3"
 mail-parser = "0.9"
+lopdf = "0.40"
 native-tls = "0.2"
 tokio-native-tls = "0.3"
 
