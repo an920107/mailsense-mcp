@@ -1,10 +1,10 @@
 use async_imap::Session;
 use async_trait::async_trait;
+use futures::StreamExt;
 use mailsense_core::config::ImapConfig;
 use mailsense_core::domain::{EmailMessage, EmailProvider};
 use native_tls::TlsConnector;
 use tokio::net::TcpStream;
-use futures::StreamExt;
 
 pub struct ImapClient {
     config: ImapConfig,
@@ -22,9 +22,13 @@ impl ImapClient {
         let tls_stream = if self.config.tls_enabled {
             let connector = TlsConnector::builder().build()?;
             let tokio_connector = tokio_native_tls::TlsConnector::from(connector);
-            tokio_connector.connect(&self.config.host, tcp_stream).await?
+            tokio_connector
+                .connect(&self.config.host, tcp_stream)
+                .await?
         } else {
-            return Err(anyhow::anyhow!("Non-TLS connections are not yet implemented"));
+            return Err(anyhow::anyhow!(
+                "Non-TLS connections are not yet implemented"
+            ));
         };
 
         let client = async_imap::Client::new(tls_stream);
@@ -32,7 +36,7 @@ impl ImapClient {
             .login(&self.config.username, &self.config.password)
             .await
             .map_err(|(e, _)| e)?;
-        
+
         session.select("INBOX").await?;
         Ok(session)
     }
@@ -42,42 +46,51 @@ impl ImapClient {
 impl EmailProvider for ImapClient {
     async fn fetch_recent(&self, limit: u32) -> anyhow::Result<Vec<EmailMessage>> {
         let mut session = self.connect().await?;
-        
+
         let search_results = session.search("ALL").await?;
         let total = search_results.len();
-        
+
         if total == 0 {
             return Ok(vec![]);
         }
 
-        let start = if total > limit as usize { total - limit as usize + 1 } else { 1 };
+        let start = if total > limit as usize {
+            total - limit as usize + 1
+        } else {
+            1
+        };
         let end = total;
 
         let fetch_range = format!("{}:{}", start, end);
         let mut messages_stream = session.fetch(fetch_range, "RFC822").await?;
-        
+
         let mut result = Vec::new();
         while let Some(msg_result) = messages_stream.next().await {
             let msg = msg_result?;
-            if let Some(body) = msg.body() {
-                if let Some(parsed) = mail_parser::MessageParser::new().parse(body) {
-                    let subject = parsed.subject().unwrap_or("No Subject").to_string();
-                    let from = parsed.from()
-                        .and_then(|f| f.as_list())
-                        .and_then(|l| l.first())
-                        .map(|a| a.address().unwrap_or("Unknown"))
-                        .unwrap_or("Unknown")
-                        .to_string();
-                    let body_text = parsed.body_text(0).as_deref().unwrap_or("").to_string();
-                    let date = parsed.date().map(|d| d.to_rfc3339()).unwrap_or_else(|| "Unknown".to_string());
+            if let Some(parsed) = msg
+                .body()
+                .and_then(|body| mail_parser::MessageParser::new().parse(body))
+            {
+                let subject = parsed.subject().unwrap_or("No Subject").to_string();
+                let from = parsed
+                    .from()
+                    .and_then(|f| f.as_list())
+                    .and_then(|l| l.first())
+                    .map(|a| a.address().unwrap_or("Unknown"))
+                    .unwrap_or("Unknown")
+                    .to_string();
+                let body_text = parsed.body_text(0).as_deref().unwrap_or("").to_string();
+                let date = parsed
+                    .date()
+                    .map(|d| d.to_rfc3339())
+                    .unwrap_or_else(|| "Unknown".to_string());
 
-                    result.push(EmailMessage {
-                        subject,
-                        from,
-                        body: body_text,
-                        date,
-                    });
-                }
+                result.push(EmailMessage {
+                    subject,
+                    from,
+                    body: body_text,
+                    date,
+                });
             }
         }
 

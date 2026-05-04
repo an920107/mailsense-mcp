@@ -33,6 +33,9 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 # Configuration
 dotenvy = "0.15"
 
+# HTTP Client
+reqwest = { version = "0.12", features = ["json"] }
+
 # Database
 sqlx = { version = "0.8", features = ["postgres", "runtime-tokio-native-tls", "macros", "chrono", "uuid", "json", "migrate"] }
 uuid = { version = "1.8", features = ["v4", "serde"] }
@@ -44,6 +47,9 @@ futures = "0.3"
 mail-parser = "0.9"
 native-tls = "0.2"
 tokio-native-tls = "0.3"
+
+# Testing
+mockito = "1.4"
 
 # Local crates
 mailsense-core = { path = "mailsense-core" }

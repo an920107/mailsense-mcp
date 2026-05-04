@@ -1,6 +1,6 @@
 use async_trait::async_trait;
-use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -67,11 +67,37 @@ pub trait StorageProvider: Send + Sync {
     async fn mark_email_processed(&self, message_id: &str) -> anyhow::Result<()>;
 
     /// Enqueue a new background task.
-    async fn enqueue_task(&self, task_type: &str, payload: serde_json::Value) -> anyhow::Result<Task>;
+    async fn enqueue_task(
+        &self,
+        task_type: &str,
+        payload: serde_json::Value,
+    ) -> anyhow::Result<Task>;
 
     /// Get a pending task and mark it as InProgress.
     async fn pick_next_task(&self) -> anyhow::Result<Option<Task>>;
 
     /// Update the status of a task.
     async fn update_task_status(&self, id: Uuid, status: TaskStatus) -> anyhow::Result<()>;
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum EmailIntent {
+    ActionRequired,
+    FYI,
+    Update,
+    Spam,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EmailAnalysis {
+    pub intent: EmailIntent,
+    pub tags: Vec<String>,
+    pub summary: String,
+    pub extracted_deadlines: Vec<DateTime<Utc>>,
+}
+
+#[async_trait]
+pub trait LlmProvider: Send + Sync {
+    /// Analyzes an email to categorize it, summarize it, and extract potential deadlines.
+    async fn analyze_email(&self, email: &EmailMessage) -> anyhow::Result<EmailAnalysis>;
 }

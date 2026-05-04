@@ -1,8 +1,8 @@
+use crate::domain::{StorageProvider, Task, TaskStatus};
 use async_trait::async_trait;
+use chrono::Utc;
 use sqlx::PgPool;
 use uuid::Uuid;
-use chrono::Utc;
-use crate::domain::{Task, TaskStatus, StorageProvider};
 
 pub struct PgStorage {
     pool: PgPool,
@@ -50,9 +50,7 @@ impl PgStorage {
     }
 
     pub async fn run_migrations(&self) -> anyhow::Result<()> {
-        sqlx::migrate!("../migrations")
-            .run(&self.pool)
-            .await?;
+        sqlx::migrate!("../migrations").run(&self.pool).await?;
         Ok(())
     }
 }
@@ -83,7 +81,11 @@ impl StorageProvider for PgStorage {
         Ok(())
     }
 
-    async fn enqueue_task(&self, task_type: &str, payload: serde_json::Value) -> anyhow::Result<Task> {
+    async fn enqueue_task(
+        &self,
+        task_type: &str,
+        payload: serde_json::Value,
+    ) -> anyhow::Result<Task> {
         let id = Uuid::new_v4();
         let now = Utc::now();
         let status = TaskStatus::Pending;
@@ -153,9 +155,15 @@ mod tests {
 
     async fn setup_test_db() -> PgStorage {
         dotenvy::dotenv().ok();
-        let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set for tests");
-        let storage = PgStorage::connect(&database_url).await.expect("Failed to connect to test DB");
-        storage.run_migrations().await.expect("Failed to run migrations");
+        let database_url =
+            std::env::var("DATABASE_URL").expect("DATABASE_URL must be set for tests");
+        let storage = PgStorage::connect(&database_url)
+            .await
+            .expect("Failed to connect to test DB");
+        storage
+            .run_migrations()
+            .await
+            .expect("Failed to run migrations");
         storage
     }
 
@@ -167,13 +175,15 @@ mod tests {
 
         // Use transaction for cleanup
         let mut tx = storage.pool.begin().await.unwrap();
-        
+
         let exists = sqlx::query!(
             "SELECT EXISTS(SELECT 1 FROM processed_emails WHERE message_id = $1) as \"exists!\"",
             message_id
         )
         .fetch_one(&mut *tx)
-        .await.unwrap().exists;
+        .await
+        .unwrap()
+        .exists;
         assert!(!exists);
 
         sqlx::query!(
@@ -182,14 +192,17 @@ mod tests {
             message_id
         )
         .execute(&mut *tx)
-        .await.unwrap();
+        .await
+        .unwrap();
 
         let exists = sqlx::query!(
             "SELECT EXISTS(SELECT 1 FROM processed_emails WHERE message_id = $1) as \"exists!\"",
             message_id
         )
         .fetch_one(&mut *tx)
-        .await.unwrap().exists;
+        .await
+        .unwrap()
+        .exists;
         assert!(exists);
 
         tx.rollback().await.unwrap();
@@ -200,27 +213,38 @@ mod tests {
     async fn test_task_queue_flow() {
         let storage = setup_test_db().await;
         let payload = serde_json::json!({"key": "value"});
-        
+
         // We can't easily use rollback for pick_next_task because it uses its own transaction internally.
         // But we can cleanup manually or use a unique task type.
         let task_type = format!("test_task_{}", Uuid::new_v4());
-        
-        let task = storage.enqueue_task(&task_type, payload.clone()).await.unwrap();
+
+        let task = storage
+            .enqueue_task(&task_type, payload.clone())
+            .await
+            .unwrap();
         assert_eq!(task.task_type, task_type);
         assert_eq!(task.status, TaskStatus::Pending);
         assert_eq!(task.payload, payload);
 
         // This pick_next_task call will only pick OUR unique task if others are not Pending.
         // To be safe, we verify it's the one we just created.
-        let picked = storage.pick_next_task().await.unwrap().expect("Should have picked a task");
+        let picked = storage
+            .pick_next_task()
+            .await
+            .unwrap()
+            .expect("Should have picked a task");
         assert_eq!(picked.id, task.id);
         assert_eq!(picked.status, TaskStatus::InProgress);
 
-        storage.update_task_status(picked.id, TaskStatus::Completed).await.unwrap();
-        
+        storage
+            .update_task_status(picked.id, TaskStatus::Completed)
+            .await
+            .unwrap();
+
         // Cleanup
         sqlx::query!("DELETE FROM tasks WHERE id = $1", picked.id)
             .execute(&storage.pool)
-            .await.unwrap();
+            .await
+            .unwrap();
     }
 }
