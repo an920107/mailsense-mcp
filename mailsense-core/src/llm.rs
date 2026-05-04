@@ -36,7 +36,6 @@ impl LlmProvider for GeminiClient {
         );
 
         // Security: Mitigate prompt injection by clearly separating instructions from data
-        // and including the message timestamp for relative date resolution.
         let prompt = format!(
             "{}\n\n[UNTRUSTED EMAIL DATA START]\nDate: {}\nSubject: {}\nFrom: {}\nBody:\n{}\n[UNTRUSTED EMAIL DATA END]",
             SYSTEM_INSTRUCTIONS, email.date, email.subject, email.from, email.body
@@ -59,8 +58,24 @@ impl LlmProvider for GeminiClient {
                 "summary": { "type": "STRING" },
                 "extracted_deadlines": {
                     "type": "ARRAY",
-                    "items": { "type": "STRING" },
-                    "description": "ISO 8601 formatted date-time strings if available, or just dates."
+                    "items": { "type": "STRING" }
+                },
+                "password_recipes": {
+                    "type": "ARRAY",
+                    "items": {
+                        "type": "ARRAY",
+                        "items": {
+                            "type": "OBJECT",
+                            "properties": {
+                                "type": { "type": "STRING", "enum": ["ID", "Bday", "Literal"] },
+                                "operation": { "type": "STRING", "enum": ["Full", "First", "Last"] },
+                                "length": { "type": "INTEGER" },
+                                "format": { "type": "STRING", "enum": ["YYYYMMDD", "MMDD", "YYMMDD", "YYMM", "MINGUO"] },
+                                "value": { "type": "STRING" }
+                            },
+                            "required": ["type"]
+                        }
+                    }
                 }
             },
             "required": ["intent", "tags", "summary", "extracted_deadlines"]
@@ -91,7 +106,6 @@ impl LlmProvider for GeminiClient {
 
         let resp_json: serde_json::Value = response.json().await?;
 
-        // Gemini response structure: candidates[0].content.parts[0].text
         let text = resp_json["candidates"][0]["content"]["parts"][0]["text"]
             .as_str()
             .ok_or_else(|| {
@@ -122,7 +136,11 @@ mod tests {
                             "intent": "ActionRequired",
                             "tags": ["Urgent", "Invoice"],
                             "summary": "Please pay the overdue invoice.",
-                            "extracted_deadlines": ["2026-05-10T10:00:00Z"]
+                            "extracted_deadlines": ["2026-05-10T10:00:00Z"],
+                            "password_recipes": [[
+                                {"type": "ID", "operation": "Last", "length": 4},
+                                {"type": "Bday", "format": "MMDD"}
+                            ]]
                         }"#
                     }]
                 }
@@ -135,7 +153,6 @@ mod tests {
                 Matcher::Regex("/v1beta/models/.*:generateContent".to_string()),
             )
             .match_header("x-goog-api-key", "test-key")
-            // We use Matcher::PartialJson to validate the structure without worrying about the exact dynamic prompt text
             .match_body(Matcher::PartialJson(json!({
                 "generationConfig": {
                     "response_mime_type": "application/json",
@@ -166,6 +183,10 @@ mod tests {
         assert_eq!(result.tags, vec!["Urgent", "Invoice"]);
         assert_eq!(result.summary, "Please pay the overdue invoice.");
         assert_eq!(result.extracted_deadlines.len(), 1);
+
+        let recipes = result.password_recipes.unwrap();
+        assert_eq!(recipes.len(), 1);
+        assert_eq!(recipes[0].len(), 2);
 
         mock.assert_async().await;
     }
