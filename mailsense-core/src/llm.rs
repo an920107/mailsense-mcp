@@ -76,7 +76,7 @@ impl LlmProvider for GeminiClient {
                                 "format": { "type": "STRING", "enum": ["YYYYMMDD", "MMDD", "YYMMDD", "YYMM", "MINGUO"] },
                                 "value": { "type": "STRING" }
                             },
-                            "required": ["type"]
+                            "required": ["type", "operation"]
                         }
                     }
                 }

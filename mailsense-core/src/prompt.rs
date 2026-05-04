@@ -18,7 +18,25 @@ Follow these rules:
    - {"type": "Bday", "format": "YYYYMMDD"|"MMDD"|"YYMMDD"|"YYMM"|"MINGUO"}: Use user's birthday.
    - {"type": "Literal", "value": "string"}: Use an exact string mentioned in the email.
    
-   Example: "Password is last 4 digits of ID + birthday MMDD" -> [[{"type": "ID", "operation": "Last", "length": 4}, {"type": "Bday", "format": "MMDD"}]]
+   ### EXAMPLE 1 (ID + Birthday)
+   Input Body: "Password is last 4 digits of ID + birthday MMDD"
+   Output: {
+     "intent": "FYI",
+     "tags": ["Bank", "Statement"],
+     "summary": "Monthly bank statement with ID/Birthday password.",
+     "extracted_deadlines": [],
+     "password_recipes": [[
+       {"type": "ID", "operation": "Last", "length": 4},
+       {"type": "Bday", "format": "MMDD"}
+     ]]
+   }
+
+   ### EXAMPLE 2 (Date window)
+   Input Body: "The password is your boarding date (YYYYMMDD)."
+   Output: {
+     ...
+     "password_recipes": [[{"type": "Bday", "format": "YYYYMMDD"}]]
+   }
 
 Your response MUST be a valid JSON object.
 "#;
