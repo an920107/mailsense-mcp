@@ -14,30 +14,36 @@ pub async fn decrypt_pdf_with_timeout(
     // Wrap the brute-force in a 60-second timeout
     let result = timeout(Duration::from_secs(60), async {
         for password in password_pool {
-            // Attempt to load the PDF
-            // Use load_from כדי 確保能夠處理 Stream
             let mut cursor = Cursor::new(pdf_bytes);
+
+            // 1. Load the document
             if let Ok(mut doc) = Document::load_from(&mut cursor) {
                 if !doc.is_encrypted() {
                     return Some(pdf_bytes.to_vec());
                 }
 
-                // Try to authenticate with the current password
+                // 2. Authenticate
+                // Note: authenticate_password returns Result<bool>.
+                // Both true (Owner) and false (User) allow decryption.
                 if doc.authenticate_password(password).is_ok() {
-                    // 1. Decrypt all encrypted objects using the password
+                    // 3. Decrypt all objects
                     if doc.decrypt(password).is_ok() {
-                        // 2. CRITICAL: Remove all encryption metadata
+                        // 4. CRITICAL CLEANUP:
+                        // Remove encryption metadata so readers don't look for a password.
                         doc.trailer.remove(b"Encrypt");
-                        doc.trailer.remove(b"ID"); // Re-generating ID is safer
+                        doc.trailer.remove(b"ID"); // Force re-generation of ID for safety
 
-                        // 3. Flatten the document: Decompress and reset version for compatibility
-                        doc.version = "1.7".to_string();
-                        doc.decompress();
+                        // 5. RESTRUCTURE:
+                        // Renumbering is essential for files that used XRef streams (common in qpdf 256).
+                        // It rebuilds the internal object map and ensures the catalog is reachable.
+                        doc.renumber_objects();
 
+                        // 6. COMPRESS & SAVE:
+                        // Using save_modern() produces a modern PDF structure with XRef streams,
+                        // which is most compatible with the original qpdf source structure.
                         let mut output = Vec::new();
-                        // 4. Use save_to (standard) instead of save_modern to maximize reader compatibility
-                        if doc.save_to(&mut output).is_ok() {
-                            tracing::info!("Successfully decrypted AES-256 PDF.");
+                        if doc.save_modern(&mut output).is_ok() {
+                            tracing::info!("Successfully decrypted and rebuilt PDF structure.");
                             return Some(output);
                         }
                     }
