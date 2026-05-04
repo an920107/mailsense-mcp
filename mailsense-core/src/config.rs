@@ -52,16 +52,13 @@ impl Config {
                 .context("IMAP_TLS_ENABLED must be true or false")?,
         };
 
-        let gemini = match std::env::var("GEMINI_API_KEY") {
-            Ok(api_key) => Some(GeminiConfig {
-                api_key,
-                model: std::env::var("GEMINI_MODEL")
-                    .unwrap_or_else(|_| "gemini-2.0-flash".to_string()),
-                base_url: std::env::var("GEMINI_BASE_URL")
-                    .unwrap_or_else(|_| "https://generativelanguage.googleapis.com".to_string()),
-            }),
-            Err(_) => None,
-        };
+        let gemini = std::env::var("GEMINI_API_KEY").ok().map(|api_key| GeminiConfig {
+            api_key,
+            model: std::env::var("GEMINI_MODEL")
+                .unwrap_or_else(|_| "gemini-2.0-flash".to_string()),
+            base_url: std::env::var("GEMINI_BASE_URL")
+                .unwrap_or_else(|_| "https://generativelanguage.googleapis.com".to_string()),
+        });
 
         Ok(Self {
             database_url,
@@ -97,18 +94,15 @@ impl Config {
                 .context("IMAP_TLS_ENABLED must be true or false")?,
         };
 
-        let gemini = match map.get("GEMINI_API_KEY") {
-            Some(api_key) => Some(GeminiConfig {
-                api_key: api_key.clone(),
-                model: map.get("GEMINI_MODEL")
-                    .cloned()
-                    .unwrap_or_else(|| "gemini-2.0-flash".to_string()),
-                base_url: map.get("GEMINI_BASE_URL")
-                    .cloned()
-                    .unwrap_or_else(|| "https://generativelanguage.googleapis.com".to_string()),
-            }),
-            None => None,
-        };
+        let gemini = map.get("GEMINI_API_KEY").map(|api_key| GeminiConfig {
+            api_key: api_key.clone(),
+            model: map.get("GEMINI_MODEL")
+                .cloned()
+                .unwrap_or_else(|| "gemini-2.0-flash".to_string()),
+            base_url: map.get("GEMINI_BASE_URL")
+                .cloned()
+                .unwrap_or_else(|| "https://generativelanguage.googleapis.com".to_string()),
+        });
 
         Ok(Self {
             database_url,
