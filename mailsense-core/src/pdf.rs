@@ -13,18 +13,28 @@ pub async fn decrypt_pdf_with_timeout(
     // Wrap the brute-force in a 60-second timeout
     let result = timeout(Duration::from_secs(60), async {
         for password in password_pool {
-            // Attempt to load and authenticate the PDF
+            // Attempt to load the PDF
             if let Ok(mut doc) = Document::load_mem(pdf_bytes) {
                 if !doc.is_encrypted() {
-                    // Already decrypted or not encrypted
                     return Some(pdf_bytes.to_vec());
                 }
 
+                // Try to authenticate with the current password
                 if doc.authenticate_password(password).is_ok() {
-                    // Success! Strip encryption and return bytes
+                    // 1. Decrypt all encrypted objects
                     if doc.decrypt(password).is_ok() {
+                        // 2. CRITICAL: Remove the Encrypt entry from the trailer
+                        // to tell PDF readers this file is no longer encrypted.
+                        doc.trailer.remove(b"Encrypt");
+
+                        // 3. Ensure the document is compressed/structured correctly for saving
+                        doc.compress();
+
                         let mut output = Vec::new();
                         if doc.save_to(&mut output).is_ok() {
+                            tracing::info!(
+                                "Successfully decrypted PDF with a password from the pool."
+                            );
                             return Some(output);
                         }
                     }
