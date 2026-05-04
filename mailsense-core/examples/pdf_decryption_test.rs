@@ -3,13 +3,19 @@ use mailsense_core::domain::{EmailMessage, LlmProvider};
 use mailsense_core::llm::GeminiClient;
 use mailsense_core::password::PasswordPoolBuilder;
 use mailsense_core::pdf::decrypt_pdf_with_timeout;
+use std::env;
+use std::fs;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    // 1. 載入配置 (包含您的身分證與生日)
+    // 1. 載入配置
     let config = Config::load().expect("Failed to load .env. Please set USER_ID_NUMBER and USER_BIRTHDAY.");
     let personal = config.personal.as_ref().expect("Personal info missing in .env");
     
+    // 檢查是否有傳入 PDF 檔案路徑
+    let args: Vec<String> = env::args().collect();
+    let pdf_path = args.get(1);
+
     println!("🚀 Testing Full Decryption Pipeline...");
     println!("Local ID (Masked): ****{}", &personal.id_number[personal.id_number.len()-4..]);
     println!("Local Bday: {}", personal.birthday);
@@ -22,7 +28,7 @@ async fn main() -> anyhow::Result<()> {
         Some(gemini_cfg.base_url.clone()),
     );
 
-    // 3. 準備一封帶有複雜密碼說明的模擬郵件
+    // 3. 準備模擬郵件 (您可以根據實際 PDF 的密碼規則修改這段 Body)
     let email = EmailMessage {
         subject: "Your E-Statement is ready".to_string(),
         from: "bank@example.com".to_string(),
@@ -39,22 +45,36 @@ async fn main() -> anyhow::Result<()> {
     println!("Duced Intent: {:?}", analysis.intent);
     println!("Password Recipes from LLM: {:?}", analysis.password_recipes);
 
-    // 4. 根據 LLM 配方組裝真實密碼
+    // 4. 根據 LLM 配方組裝密碼池
     println!("\n🔑 Phase 2: Local Password Assembly...");
     let builder = PasswordPoolBuilder::new(personal);
     let pool = builder.build(&email, analysis.password_recipes.as_ref());
-    
-    println!("Generated Password Pool (Top 5):");
-    for (i, pwd) in pool.iter().take(5).enumerate() {
-        println!("  {}. {}", i + 1, pwd);
-    }
+    println!("Generated {} password candidates.", pool.len());
 
-    // 5. 驗證期望的密碼是否在池中
-    let expected = format!("{}{}", &personal.id_number[personal.id_number.len()-4..], &personal.birthday[4..]);
-    if pool.contains(&expected) {
-        println!("\n✅ Success! The correct password '{}' was successfully generated locally.", expected);
+    // 5. 如果有提供檔案，則執行真實解密
+    if let Some(path) = pdf_path {
+        println!("\n📄 Phase 3: Real PDF Decryption (Path: {})...", path);
+        let pdf_bytes = fs::read(path)?;
+        
+        match decrypt_pdf_with_timeout(&pdf_bytes, &pool).await? {
+            Some(decrypted) => {
+                let out_path = "decrypted_output.pdf";
+                fs::write(out_path, decrypted)?;
+                println!("✅ Success! PDF decrypted and saved to: {}", out_path);
+            },
+            None => {
+                println!("❌ Failure: Could not decrypt the PDF with the generated password pool.");
+            }
+        }
     } else {
-        println!("\n❌ Failure: The expected password '{}' is missing from the pool.", expected);
+        println!("\n💡 Tip: Provide a PDF path as an argument to test real decryption.");
+        println!("Example: cargo run -p mailsense-core --example pdf_decryption_test -- my_locked_file.pdf");
+        
+        // 僅驗證密碼池組裝邏輯
+        let expected = format!("{}{}", &personal.id_number[personal.id_number.len()-4..], &personal.birthday[4..]);
+        if pool.contains(&expected) {
+            println!("\n✅ Assembly logic verified: '{}' is in the pool.", expected);
+        }
     }
 
     Ok(())
