@@ -3,6 +3,7 @@ use reqwest::Client;
 use serde_json::json;
 use crate::domain::{EmailMessage, EmailAnalysis, LlmProvider};
 use crate::prompt::SYSTEM_INSTRUCTIONS;
+use std::time::Duration;
 
 pub struct GeminiClient {
     api_key: String,
@@ -16,7 +17,10 @@ impl GeminiClient {
         Self {
             api_key,
             model: model.unwrap_or_else(|| "gemini-2.0-flash".to_string()),
-            client: Client::new(),
+            client: Client::builder()
+                .timeout(Duration::from_secs(30))
+                .build()
+                .unwrap_or_else(|_| Client::new()),
             base_url: base_url.unwrap_or_else(|| "https://generativelanguage.googleapis.com".to_string()),
         }
     }
@@ -30,28 +34,32 @@ impl LlmProvider for GeminiClient {
             self.base_url, self.model
         );
 
+        // Security: Mitigate prompt injection by clearly separating instructions from data
+        // and including the message timestamp for relative date resolution.
         let prompt = format!(
-            "{}\n\nEmail Subject: {}\nEmail From: {}\nEmail Body:\n{}",
-            SYSTEM_INSTRUCTIONS, email.subject, email.from, email.body
+            "{}\n\n[UNTRUSTED EMAIL DATA START]\nDate: {}\nSubject: {}\nFrom: {}\nBody:\n{}\n[UNTRUSTED EMAIL DATA END]",
+            SYSTEM_INSTRUCTIONS, email.date, email.subject, email.from, email.body
         );
 
         // Gemini JSON Schema definition for Structured Outputs
         let schema = json!({
-            "type": "object",
+            "type": "OBJECT",
             "properties": {
                 "intent": {
-                    "type": "string",
+                    "type": "STRING",
                     "enum": ["ActionRequired", "FYI", "Update", "Spam"]
                 },
                 "tags": {
-                    "type": "array",
-                    "items": { "type": "string" },
+                    "type": "ARRAY",
+                    "items": { "type": "STRING" },
+                    "minItems": 1,
                     "maxItems": 3
                 },
-                "summary": { "type": "string" },
+                "summary": { "type": "STRING" },
                 "extracted_deadlines": {
-                    "type": "array",
-                    "items": { "type": "string", "format": "date-time" }
+                    "type": "ARRAY",
+                    "items": { "type": "STRING" },
+                    "description": "ISO 8601 formatted date-time strings if available, or just dates."
                 }
             },
             "required": ["intent", "tags", "summary", "extracted_deadlines"]
@@ -93,7 +101,7 @@ impl LlmProvider for GeminiClient {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mockito::Server;
+    use mockito::{Server, Matcher};
     use crate::domain::EmailIntent;
 
     #[tokio::test]
@@ -116,8 +124,18 @@ mod tests {
             }]
         });
 
-        let mock = server.mock("POST", "/v1beta/models/gemini-2.0-flash:generateContent")
+        let mock = server.mock("POST", Matcher::Regex("/v1beta/models/.*:generateContent".to_string()))
             .match_header("x-goog-api-key", "test-key")
+            // We use Matcher::PartialJson to validate the structure without worrying about the exact dynamic prompt text
+            .match_body(Matcher::PartialJson(json!({
+                "generationConfig": {
+                    "response_mime_type": "application/json",
+                    "response_schema": {
+                        "type": "OBJECT",
+                        "required": ["intent", "tags", "summary", "extracted_deadlines"]
+                    }
+                }
+            })))
             .with_status(200)
             .with_header("content-type", "application/json")
             .with_body(serde_json::to_string(&mock_body).unwrap())
