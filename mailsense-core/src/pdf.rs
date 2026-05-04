@@ -1,4 +1,5 @@
 use lopdf::Document;
+use std::io::Cursor;
 use std::time::Duration;
 use tokio::time::timeout;
 
@@ -14,27 +15,29 @@ pub async fn decrypt_pdf_with_timeout(
     let result = timeout(Duration::from_secs(60), async {
         for password in password_pool {
             // Attempt to load the PDF
-            if let Ok(mut doc) = Document::load_mem(pdf_bytes) {
+            // Use load_from כדי 確保能夠處理 Stream
+            let mut cursor = Cursor::new(pdf_bytes);
+            if let Ok(mut doc) = Document::load_from(&mut cursor) {
                 if !doc.is_encrypted() {
                     return Some(pdf_bytes.to_vec());
                 }
 
                 // Try to authenticate with the current password
                 if doc.authenticate_password(password).is_ok() {
-                    // 1. Decrypt all encrypted objects
+                    // 1. Decrypt all encrypted objects using the password
                     if doc.decrypt(password).is_ok() {
-                        // 2. CRITICAL: Remove the Encrypt entry from the trailer
-                        // to tell PDF readers this file is no longer encrypted.
+                        // 2. CRITICAL: Remove all encryption metadata
                         doc.trailer.remove(b"Encrypt");
+                        doc.trailer.remove(b"ID"); // Re-generating ID is safer
 
-                        // 3. Ensure the document is compressed/structured correctly for saving
-                        doc.compress();
+                        // 3. Flatten the document: Decompress and reset version for compatibility
+                        doc.version = "1.7".to_string();
+                        doc.decompress();
 
                         let mut output = Vec::new();
+                        // 4. Use save_to (standard) instead of save_modern to maximize reader compatibility
                         if doc.save_to(&mut output).is_ok() {
-                            tracing::info!(
-                                "Successfully decrypted PDF with a password from the pool."
-                            );
+                            tracing::info!("Successfully decrypted AES-256 PDF.");
                             return Some(output);
                         }
                     }
