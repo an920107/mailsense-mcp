@@ -1,7 +1,10 @@
-use crate::protocol::{InitializeParams, InitializeResult, JsonRpcRequest, JsonRpcResponse, ServerCapabilities, ServerInfo};
+use crate::protocol::{
+    InitializeParams, InitializeResult, JsonRpcRequest, JsonRpcResponse, ServerCapabilities,
+    ServerInfo,
+};
 use anyhow::Result;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-use tracing::{error, info, debug};
+use tracing::{debug, error, info};
 
 pub struct McpServer {
     pub name: String,
@@ -18,14 +21,14 @@ impl McpServer {
 
     pub async fn run(&self) -> Result<()> {
         info!("Starting MCP server: {} (v{})", self.name, self.version);
-        
+
         let stdin = tokio::io::stdin();
         let mut reader = BufReader::new(stdin).lines();
         let mut stdout = tokio::io::stdout();
 
         while let Some(line) = reader.next_line().await? {
             debug!("Received message: {}", line);
-            
+
             match serde_json::from_str::<JsonRpcRequest>(&line) {
                 Ok(req) => {
                     if let Some(resp) = self.handle_request(req).await {
@@ -46,9 +49,13 @@ impl McpServer {
     async fn handle_request(&self, req: JsonRpcRequest) -> Option<JsonRpcResponse> {
         match req.method.as_str() {
             "initialize" => {
-                let params: InitializeParams = serde_json::from_value(req.params.unwrap_or_default()).ok()?;
-                info!("Client connected: {} (v{})", params.client_info.name, params.client_info.version);
-                
+                let params: InitializeParams =
+                    serde_json::from_value(req.params.unwrap_or_default()).ok()?;
+                info!(
+                    "Client connected: {} (v{})",
+                    params.client_info.name, params.client_info.version
+                );
+
                 let result = InitializeResult {
                     protocol_version: params.protocol_version,
                     capabilities: ServerCapabilities::default(),

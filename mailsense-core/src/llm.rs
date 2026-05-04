@@ -1,8 +1,8 @@
+use crate::domain::{EmailAnalysis, EmailMessage, LlmProvider};
+use crate::prompt::SYSTEM_INSTRUCTIONS;
 use async_trait::async_trait;
 use reqwest::Client;
 use serde_json::json;
-use crate::domain::{EmailMessage, EmailAnalysis, LlmProvider};
-use crate::prompt::SYSTEM_INSTRUCTIONS;
 use std::time::Duration;
 
 pub struct GeminiClient {
@@ -21,7 +21,8 @@ impl GeminiClient {
                 .timeout(Duration::from_secs(30))
                 .build()
                 .unwrap_or_else(|_| Client::new()),
-            base_url: base_url.unwrap_or_else(|| "https://generativelanguage.googleapis.com".to_string()),
+            base_url: base_url
+                .unwrap_or_else(|| "https://generativelanguage.googleapis.com".to_string()),
         }
     }
 }
@@ -75,7 +76,9 @@ impl LlmProvider for GeminiClient {
             }
         });
 
-        let response = self.client.post(&url)
+        let response = self
+            .client
+            .post(&url)
             .header("x-goog-api-key", &self.api_key)
             .json(&body)
             .send()
@@ -87,11 +90,13 @@ impl LlmProvider for GeminiClient {
         }
 
         let resp_json: serde_json::Value = response.json().await?;
-        
+
         // Gemini response structure: candidates[0].content.parts[0].text
         let text = resp_json["candidates"][0]["content"]["parts"][0]["text"]
             .as_str()
-            .ok_or_else(|| anyhow::anyhow!("Invalid response structure from Gemini: {:?}", resp_json))?;
+            .ok_or_else(|| {
+                anyhow::anyhow!("Invalid response structure from Gemini: {:?}", resp_json)
+            })?;
 
         let analysis: EmailAnalysis = serde_json::from_str(text)?;
         Ok(analysis)
@@ -101,14 +106,14 @@ impl LlmProvider for GeminiClient {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mockito::{Server, Matcher};
     use crate::domain::EmailIntent;
+    use mockito::{Matcher, Server};
 
     #[tokio::test]
     async fn test_gemini_analysis_parsing() {
         let mut server = Server::new_async().await;
         let url = server.url();
-        
+
         let mock_body = json!({
             "candidates": [{
                 "content": {
@@ -124,7 +129,11 @@ mod tests {
             }]
         });
 
-        let mock = server.mock("POST", Matcher::Regex("/v1beta/models/.*:generateContent".to_string()))
+        let mock = server
+            .mock(
+                "POST",
+                Matcher::Regex("/v1beta/models/.*:generateContent".to_string()),
+            )
             .match_header("x-goog-api-key", "test-key")
             // We use Matcher::PartialJson to validate the structure without worrying about the exact dynamic prompt text
             .match_body(Matcher::PartialJson(json!({
@@ -157,7 +166,7 @@ mod tests {
         assert_eq!(result.tags, vec!["Urgent", "Invoice"]);
         assert_eq!(result.summary, "Please pay the overdue invoice.");
         assert_eq!(result.extracted_deadlines.len(), 1);
-        
+
         mock.assert_async().await;
     }
 }

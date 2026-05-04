@@ -6,12 +6,12 @@ async fn main() -> anyhow::Result<()> {
     // 1. 載入 .env 檔案與配置
     // 我們使用手動加載來避免因為缺少 IMAP/DB 配置而失敗，這解決了 Copilot 的 Review 意見。
     dotenvy::dotenv().ok();
-    
+
     let api_key = std::env::var("GEMINI_API_KEY")
         .expect("GEMINI_API_KEY must be set in .env for this example.");
     let model = std::env::var("GEMINI_MODEL").ok();
     let base_url = std::env::var("GEMINI_BASE_URL").ok();
-    
+
     println!("🚀 Testing Gemini LLM Integration...");
     println!("Model: {}", model.as_deref().unwrap_or("gemini-2.0-flash"));
 
@@ -30,14 +30,15 @@ async fn main() -> anyhow::Result<()> {
             
             Thanks,
             DevOps Team
-        "#.to_string(),
+        "#
+        .to_string(),
         date: "2026-05-04".to_string(),
     };
 
     println!("\n📧 Analyzing Email...");
     println!("-------------------");
     println!("Subject: {}", email.subject);
-    
+
     // 4. 呼叫 LLM
     match client.analyze_email(&email).await {
         Ok(analysis) => {

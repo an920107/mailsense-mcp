@@ -67,28 +67,31 @@ impl EmailProvider for ImapClient {
         let mut result = Vec::new();
         while let Some(msg_result) = messages_stream.next().await {
             let msg = msg_result?;
-            if let Some(parsed) = msg.body().and_then(|body| mail_parser::MessageParser::new().parse(body)) {
+            if let Some(parsed) = msg
+                .body()
+                .and_then(|body| mail_parser::MessageParser::new().parse(body))
+            {
                 let subject = parsed.subject().unwrap_or("No Subject").to_string();
-                    let from = parsed
-                        .from()
-                        .and_then(|f| f.as_list())
-                        .and_then(|l| l.first())
-                        .map(|a| a.address().unwrap_or("Unknown"))
-                        .unwrap_or("Unknown")
-                        .to_string();
-                    let body_text = parsed.body_text(0).as_deref().unwrap_or("").to_string();
-                    let date = parsed
-                        .date()
-                        .map(|d| d.to_rfc3339())
-                        .unwrap_or_else(|| "Unknown".to_string());
+                let from = parsed
+                    .from()
+                    .and_then(|f| f.as_list())
+                    .and_then(|l| l.first())
+                    .map(|a| a.address().unwrap_or("Unknown"))
+                    .unwrap_or("Unknown")
+                    .to_string();
+                let body_text = parsed.body_text(0).as_deref().unwrap_or("").to_string();
+                let date = parsed
+                    .date()
+                    .map(|d| d.to_rfc3339())
+                    .unwrap_or_else(|| "Unknown".to_string());
 
-                    result.push(EmailMessage {
-                        subject,
-                        from,
-                        body: body_text,
-                        date,
-                    });
-                }
+                result.push(EmailMessage {
+                    subject,
+                    from,
+                    body: body_text,
+                    date,
+                });
+            }
         }
 
         result.reverse();

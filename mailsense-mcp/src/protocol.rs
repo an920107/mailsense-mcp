@@ -94,7 +94,7 @@ mod tests {
         let request: JsonRpcRequest = serde_json::from_str(request_json).unwrap();
         assert_eq!(request.method, "initialize");
         assert_eq!(request.id, serde_json::json!(1));
-        
+
         let params: InitializeParams = serde_json::from_value(request.params.unwrap()).unwrap();
         assert_eq!(params.protocol_version, "2024-11-05");
     }

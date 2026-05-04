@@ -1,6 +1,6 @@
 use async_trait::async_trait;
-use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -67,7 +67,11 @@ pub trait StorageProvider: Send + Sync {
     async fn mark_email_processed(&self, message_id: &str) -> anyhow::Result<()>;
 
     /// Enqueue a new background task.
-    async fn enqueue_task(&self, task_type: &str, payload: serde_json::Value) -> anyhow::Result<Task>;
+    async fn enqueue_task(
+        &self,
+        task_type: &str,
+        payload: serde_json::Value,
+    ) -> anyhow::Result<Task>;
 
     /// Get a pending task and mark it as InProgress.
     async fn pick_next_task(&self) -> anyhow::Result<Option<Task>>;
