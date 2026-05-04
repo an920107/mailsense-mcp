@@ -69,7 +69,10 @@ impl LlmProvider for GeminiClient {
                             "properties": {
                                 "type": { "type": "STRING", "enum": ["ID", "Bday", "Literal"] },
                                 "operation": { "type": "STRING", "enum": ["Full", "First", "Last"] },
-                                "length": { "type": "INTEGER" },
+                                "length": { 
+                                    "type": "INTEGER",
+                                    "description": "Required for First/Last operations. The number of characters to extract."
+                                },
                                 "format": { "type": "STRING", "enum": ["YYYYMMDD", "MMDD", "YYMMDD", "YYMM", "MINGUO"] },
                                 "value": { "type": "STRING" }
                             },

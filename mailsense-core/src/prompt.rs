@@ -13,7 +13,8 @@ Follow these rules:
 5. Detect PDF Password Rules:
    If the email mentions a password for an attachment, provide one or more "recipes" to assemble it.
    Predefined components:
-   - {"type": "ID", "operation": "Full"|"First"|"Last", "length": number}: Use user's ID number.
+   - {"type": "ID", "operation": "Full"|"First"|"Last", "length": number}: Use user's ID number. 
+     IMPORTANT: For "First" and "Last" operations, you MUST specify the exact 'length' mentioned in the email (e.g., "last 4 digits" -> length: 4).
    - {"type": "Bday", "format": "YYYYMMDD"|"MMDD"|"YYMMDD"|"YYMM"|"MINGUO"}: Use user's birthday.
    - {"type": "Literal", "value": "string"}: Use an exact string mentioned in the email.
    
