@@ -1,22 +1,22 @@
-use mailsense_core::config::Config;
 use mailsense_core::domain::{EmailMessage, LlmProvider};
 use mailsense_core::llm::GeminiClient;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     // 1. 載入 .env 檔案與配置
-    let config = Config::load().expect("Failed to load .env file. Please check GEMINI_API_KEY.");
+    // 我們使用手動加載來避免因為缺少 IMAP/DB 配置而失敗，這解決了 Copilot 的 Review 意見。
+    dotenvy::dotenv().ok();
+    
+    let api_key = std::env::var("GEMINI_API_KEY")
+        .expect("GEMINI_API_KEY must be set in .env for this example.");
+    let model = std::env::var("GEMINI_MODEL").ok();
+    let base_url = std::env::var("GEMINI_BASE_URL").ok();
     
     println!("🚀 Testing Gemini LLM Integration...");
-    println!("Model: {}", config.gemini.model);
-    println!("Base URL: {}", config.gemini.base_url);
+    println!("Model: {}", model.as_deref().unwrap_or("gemini-2.0-flash"));
 
     // 2. 初始化 Gemini 客戶端
-    let client = GeminiClient::new(
-        config.gemini.api_key,
-        Some(config.gemini.model),
-        Some(config.gemini.base_url),
-    );
+    let client = GeminiClient::new(api_key, model, base_url);
 
     // 3. 準備一封測試郵件
     let email = EmailMessage {
