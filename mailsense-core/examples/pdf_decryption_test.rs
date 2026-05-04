@@ -9,15 +9,22 @@ use std::fs;
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     // 1. 載入配置
-    let config = Config::load().expect("Failed to load .env. Please set USER_ID_NUMBER and USER_BIRTHDAY.");
-    let personal = config.personal.as_ref().expect("Personal info missing in .env");
-    
+    let config =
+        Config::load().expect("Failed to load .env. Please set USER_ID_NUMBER and USER_BIRTHDAY.");
+    let personal = config
+        .personal
+        .as_ref()
+        .expect("Personal info missing in .env");
+
     // 檢查是否有傳入 PDF 檔案路徑
     let args: Vec<String> = env::args().collect();
     let pdf_path = args.get(1);
 
     println!("🚀 Testing Full Decryption Pipeline...");
-    println!("Local ID (Masked): ****{}", &personal.id_number[personal.id_number.len()-4..]);
+    println!(
+        "Local ID (Masked): ****{}",
+        &personal.id_number[personal.id_number.len() - 4..]
+    );
     println!("Local Bday: {}", personal.birthday);
 
     // 2. 初始化 LLM
@@ -36,7 +43,8 @@ async fn main() -> anyhow::Result<()> {
             Dear Customer,
             Your monthly statement is attached as an encrypted PDF.
             The password is the last 4 digits of your ID number followed by your birthday MMDD.
-        "#.to_string(),
+        "#
+        .to_string(),
         date: "2026-05-04T10:00:00Z".to_string(),
     };
 
@@ -55,25 +63,34 @@ async fn main() -> anyhow::Result<()> {
     if let Some(path) = pdf_path {
         println!("\n📄 Phase 3: Real PDF Decryption (Path: {})...", path);
         let pdf_bytes = fs::read(path)?;
-        
+
         match decrypt_pdf_with_timeout(&pdf_bytes, &pool).await? {
             Some(decrypted) => {
                 let out_path = "decrypted_output.pdf";
                 fs::write(out_path, decrypted)?;
                 println!("✅ Success! PDF decrypted and saved to: {}", out_path);
-            },
+            }
             None => {
                 println!("❌ Failure: Could not decrypt the PDF with the generated password pool.");
             }
         }
     } else {
         println!("\n💡 Tip: Provide a PDF path as an argument to test real decryption.");
-        println!("Example: cargo run -p mailsense-core --example pdf_decryption_test -- my_locked_file.pdf");
-        
+        println!(
+            "Example: cargo run -p mailsense-core --example pdf_decryption_test -- my_locked_file.pdf"
+        );
+
         // 僅驗證密碼池組裝邏輯
-        let expected = format!("{}{}", &personal.id_number[personal.id_number.len()-4..], &personal.birthday[4..]);
+        let expected = format!(
+            "{}{}",
+            &personal.id_number[personal.id_number.len() - 4..],
+            &personal.birthday[4..]
+        );
         if pool.contains(&expected) {
-            println!("\n✅ Assembly logic verified: '{}' is in the pool.", expected);
+            println!(
+                "\n✅ Assembly logic verified: '{}' is in the pool.",
+                expected
+            );
         }
     }
 
