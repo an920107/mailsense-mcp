@@ -9,7 +9,15 @@ Follow these rules:
    - Spam: Unsolicited or irrelevant content.
 2. Generate 1-3 concise tags (keywords) representing the content (e.g., "Invoice", "Meeting", "AWS").
 3. Provide a one-sentence concise summary of the email.
-4. Extract any specific deadlines mentioned in the text.
+4. Extract any specific deadlines mentioned in the text (ISO 8601 strings or dates).
+5. Detect PDF Password Rules:
+   If the email mentions a password for an attachment, provide one or more "recipes" to assemble it.
+   Predefined components:
+   - {"type": "ID", "operation": "Full"|"First"|"Last", "length": number}: Use user's ID number.
+   - {"type": "Bday", "format": "YYYYMMDD"|"MMDD"|"YYMMDD"|"YYMM"|"MINGUO"}: Use user's birthday.
+   - {"type": "Literal", "value": "string"}: Use an exact string mentioned in the email.
+   
+   Example: "Password is last 4 digits of ID + birthday MMDD" -> [[{"type": "ID", "operation": "Last", "length": 4}, {"type": "Bday", "format": "MMDD"}]]
 
 Your response MUST be a valid JSON object.
 "#;
