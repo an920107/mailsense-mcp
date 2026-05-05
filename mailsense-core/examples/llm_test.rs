@@ -24,10 +24,10 @@ async fn main() -> anyhow::Result<()> {
         from: "devops@example.com".to_string(),
         body: r#"
             Hi Team,
-            
+
             We have a scheduled maintenance window this Friday, May 8th, at 10:00 PM UTC.
             Please ensure all background workers are paused before that.
-            
+
             Thanks,
             DevOps Team
         "#

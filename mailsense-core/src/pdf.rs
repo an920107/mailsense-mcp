@@ -18,7 +18,7 @@ pub async fn decrypt_pdf_with_timeout(
                 // 2. CRITICAL CLEANUP:
                 // Remove encryption metadata so readers don't look for a password.
                 doc.trailer.remove(b"Encrypt");
-                
+
                 // 3. DECOMPRESS
                 // Often helpful for compatibility with various readers after decryption.
                 doc.decompress();
@@ -47,7 +47,7 @@ pub async fn decrypt_pdf_with_timeout(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use lopdf::{Document, Object, Dictionary};
+    use lopdf::{Dictionary, Document, Object};
     use std::io::Cursor;
 
     #[tokio::test]
@@ -60,9 +60,10 @@ mod tests {
             ("Subtype", "Type1".into()),
             ("BaseFont", "Courier".into()),
         ]));
-        let resources_id = doc.add_object(Dictionary::from_iter(vec![
-            ("Font", Dictionary::from_iter(vec![("F1", font_id.into())]).into()),
-        ]));
+        let resources_id = doc.add_object(Dictionary::from_iter(vec![(
+            "Font",
+            Dictionary::from_iter(vec![("F1", font_id.into())]).into(),
+        )]));
         let content = b"BT /F1 12 Tf 100 700 Td (Hello World) Tj ET";
         let content_id = doc.add_object(lopdf::Stream::new(Dictionary::new(), content.to_vec()));
         let page_id = doc.add_object(Dictionary::from_iter(vec![
@@ -70,7 +71,10 @@ mod tests {
             ("Parent", pages_id.into()),
             ("Contents", content_id.into()),
             ("Resources", resources_id.into()),
-            ("MediaBox", vec![0.into(), 0.into(), 595.into(), 842.into()].into()),
+            (
+                "MediaBox",
+                vec![0.into(), 0.into(), 595.into(), 842.into()].into(),
+            ),
         ]));
         let pages = Dictionary::from_iter(vec![
             ("Type", "Pages".into()),
@@ -87,12 +91,12 @@ mod tests {
         // 2. Mocking encryption by just checking the unencrypted path first
         let mut bytes = Vec::new();
         doc.save_to(&mut bytes).unwrap();
-        
+
         let result = decrypt_pdf_with_timeout(&bytes, &["pass".to_string()])
             .await
             .unwrap()
             .expect("Should return a valid PDF even if not encrypted");
-        
+
         // Load the result and verify it's a valid PDF
         let result_doc = Document::load_from(&mut Cursor::new(&result)).unwrap();
         assert_eq!(result_doc.version, "1.5");
