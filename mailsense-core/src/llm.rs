@@ -187,8 +187,12 @@ impl LlmProvider for GeminiClient {
 
         let embedding: Vec<f32> = values
             .iter()
-            .map(|v| v.as_f64().unwrap_or(0.0) as f32)
-            .collect();
+            .map(|v| {
+                v.as_f64()
+                    .map(|f| f as f32)
+                    .ok_or_else(|| anyhow::anyhow!("Non-numeric value in embedding: {:?}", v))
+            })
+            .collect::<anyhow::Result<Vec<f32>>>()?;
 
         Ok(embedding)
     }
@@ -233,8 +237,12 @@ impl LlmProvider for GeminiClient {
 
         let embedding: Vec<f32> = values
             .iter()
-            .map(|v| v.as_f64().unwrap_or(0.0) as f32)
-            .collect();
+            .map(|v| {
+                v.as_f64()
+                    .map(|f| f as f32)
+                    .ok_or_else(|| anyhow::anyhow!("Non-numeric value in embedding: {:?}", v))
+            })
+            .collect::<anyhow::Result<Vec<f32>>>()?;
 
         Ok(embedding)
     }
