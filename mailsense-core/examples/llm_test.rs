@@ -16,7 +16,7 @@ async fn main() -> anyhow::Result<()> {
     println!("Model: {}", model.as_deref().unwrap_or("gemini-2.0-flash"));
 
     // 2. 初始化 Gemini 客戶端
-    let client = GeminiClient::new(api_key, model, base_url);
+    let client = GeminiClient::new(api_key, model, None, base_url);
 
     // 3. 準備一封測試郵件
     let email = EmailMessage {

@@ -4,15 +4,22 @@ use serde_json::json;
 pub struct GeminiClient {
     api_key: String,
     model: String,
+    embedding_model: String,
     base_url: String,
     client: reqwest::Client,
 }
 
 impl GeminiClient {
-    pub fn new(api_key: String, model: Option<String>, base_url: Option<String>) -> Self {
+    pub fn new(
+        api_key: String,
+        model: Option<String>,
+        embedding_model: Option<String>,
+        base_url: Option<String>,
+    ) -> Self {
         Self {
             api_key,
             model: model.unwrap_or_else(|| "gemini-1.5-flash".to_string()),
+            embedding_model: embedding_model.unwrap_or_else(|| "text-embedding-004".to_string()),
             base_url: base_url
                 .unwrap_or_else(|| "https://generativelanguage.googleapis.com".to_string()),
             client: reqwest::Client::new(),
@@ -127,12 +134,12 @@ impl LlmProvider for GeminiClient {
 
     async fn generate_embedding(&self, text: &str) -> anyhow::Result<Vec<f32>> {
         let url = format!(
-            "{}/v1beta/models/text-embedding-004:embedContent",
-            self.base_url
+            "{}/v1beta/models/{}:embedContent",
+            self.base_url, self.embedding_model
         );
 
         let body = json!({
-            "model": "models/text-embedding-004",
+            "model": format!("models/{}", self.embedding_model),
             "content": {
                 "parts": [{ "text": text }]
             }
@@ -216,7 +223,7 @@ mod tests {
             .create_async()
             .await;
 
-        let client = GeminiClient::new("test-key".to_string(), None, Some(url));
+        let client = GeminiClient::new("test-key".to_string(), None, None, Some(url));
 
         let email = EmailMessage {
             message_id: "test-id".to_string(),
@@ -272,7 +279,7 @@ mod tests {
             .create_async()
             .await;
 
-        let client = GeminiClient::new("test-key".to_string(), None, Some(url));
+        let client = GeminiClient::new("test-key".to_string(), None, None, Some(url));
 
         let result = client.generate_embedding("hello world").await.unwrap();
 

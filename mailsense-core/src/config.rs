@@ -23,6 +23,7 @@ pub struct ImapConfig {
 pub struct GeminiConfig {
     pub api_key: String,
     pub model: String,
+    pub embedding_model: String,
     pub base_url: String,
 }
 
@@ -64,6 +65,8 @@ impl Config {
                 api_key,
                 model: std::env::var("GEMINI_MODEL")
                     .unwrap_or_else(|_| "gemini-2.0-flash".to_string()),
+                embedding_model: std::env::var("GEMINI_EMBEDDING_MODEL")
+                    .unwrap_or_else(|_| "text-embedding-004".to_string()),
                 base_url: std::env::var("GEMINI_BASE_URL")
                     .unwrap_or_else(|_| "https://generativelanguage.googleapis.com".to_string()),
             });
@@ -137,6 +140,10 @@ impl Config {
                 .get("GEMINI_MODEL")
                 .cloned()
                 .unwrap_or_else(|| "gemini-2.0-flash".to_string()),
+            embedding_model: map
+                .get("GEMINI_EMBEDDING_MODEL")
+                .cloned()
+                .unwrap_or_else(|| "text-embedding-004".to_string()),
             base_url: map
                 .get("GEMINI_BASE_URL")
                 .cloned()
