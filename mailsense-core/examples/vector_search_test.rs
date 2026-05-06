@@ -92,10 +92,7 @@ async fn main() -> anyhow::Result<()> {
             .store_email_document(email, &thread_id, Some(embedding), None)
             .await?;
 
-        // 標記為已處理
-        storage.mark_email_processed(&email.message_id).await?;
-
-        println!("✅ Stored & Marked.");
+        println!("✅ Stored.");
     }
 
     // 5. 測試混合搜索

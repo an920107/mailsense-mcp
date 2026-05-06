@@ -43,10 +43,8 @@ impl EmailMessage {
 #[async_trait]
 pub trait StorageProvider: Send + Sync {
     /// Check if an email has already been processed by its Message-ID.
+    /// This now checks for existence in the email_documents table.
     async fn is_email_processed(&self, message_id: &str) -> anyhow::Result<bool>;
-
-    /// Mark an email as processed.
-    async fn mark_email_processed(&self, message_id: &str) -> anyhow::Result<()>;
 
     /// Get an email by its Message-ID.
     async fn get_email_by_id(&self, message_id: &str) -> anyhow::Result<Option<EmailMessage>>;

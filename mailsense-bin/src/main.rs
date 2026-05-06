@@ -187,9 +187,6 @@ async fn process_emails(
                 .store_email_document(email, &thread_id, Some(embedding), analysis)
                 .await?;
 
-            // 4. Mark as processed
-            storage.mark_email_processed(&email.message_id).await?;
-
             processed_count += 1;
         }
     }

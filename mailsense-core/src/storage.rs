@@ -1,4 +1,4 @@
-use crate::domain::StorageProvider;
+use crate::domain::{EmailMessage, StorageProvider};
 use anyhow::Context;
 use async_trait::async_trait;
 use chrono::Utc;
@@ -29,7 +29,7 @@ impl PgStorage {
 impl StorageProvider for PgStorage {
     async fn is_email_processed(&self, message_id: &str) -> anyhow::Result<bool> {
         let exists = sqlx::query!(
-            "SELECT EXISTS(SELECT 1 FROM processed_emails WHERE message_id = $1) as \"exists!\"",
+            "SELECT EXISTS(SELECT 1 FROM email_documents WHERE message_id = $1) as \"exists!\"",
             message_id
         )
         .fetch_one(&self.pool)
@@ -39,22 +39,7 @@ impl StorageProvider for PgStorage {
         Ok(exists)
     }
 
-    async fn mark_email_processed(&self, message_id: &str) -> anyhow::Result<()> {
-        sqlx::query!(
-            "INSERT INTO processed_emails (id, message_id) VALUES ($1, $2) ON CONFLICT (message_id) DO NOTHING",
-            Uuid::new_v4(),
-            message_id
-        )
-        .execute(&self.pool)
-        .await?;
-
-        Ok(())
-    }
-
-    async fn get_email_by_id(
-        &self,
-        message_id: &str,
-    ) -> anyhow::Result<Option<crate::domain::EmailMessage>> {
+    async fn get_email_by_id(&self, message_id: &str) -> anyhow::Result<Option<EmailMessage>> {
         let row = sqlx::query!(
             r#"
             SELECT 
@@ -289,41 +274,43 @@ mod tests {
     #[ignore] // Requires a running Postgres DB
     async fn test_processed_email_tracking() {
         let storage = setup_test_db().await;
-        let message_id = format!("test-email-{}", Uuid::new_v4());
+        let message_id = format!("test-id-{}", uuid::Uuid::new_v4());
 
-        // Use transaction for cleanup
-        let mut tx = storage.pool.begin().await.unwrap();
-
-        let exists = sqlx::query!(
-            "SELECT EXISTS(SELECT 1 FROM processed_emails WHERE message_id = $1) as \"exists!\"",
-            message_id
-        )
-        .fetch_one(&mut *tx)
-        .await
-        .unwrap()
-        .exists;
+        // Initially not processed
+        let exists = storage.is_email_processed(&message_id).await.unwrap();
         assert!(!exists);
 
-        sqlx::query!(
-            "INSERT INTO processed_emails (id, message_id) VALUES ($1, $2)",
-            Uuid::new_v4(),
-            message_id
-        )
-        .execute(&mut *tx)
-        .await
-        .unwrap();
+        // Store a dummy email
+        let email = crate::domain::EmailMessage {
+            message_id: message_id.clone(),
+            thread_id: None,
+            in_reply_to: None,
+            references: vec![],
+            subject: "Idempotency Test".to_string(),
+            from: "tester@example.com".to_string(),
+            body: "Testing...".to_string(),
+            date: "2026-05-06T12:00:00Z".to_string(),
+            attachments: vec![],
+            analysis: None,
+        };
 
-        let exists = sqlx::query!(
-            "SELECT EXISTS(SELECT 1 FROM processed_emails WHERE message_id = $1) as \"exists!\"",
-            message_id
-        )
-        .fetch_one(&mut *tx)
-        .await
-        .unwrap()
-        .exists;
+        storage
+            .store_email_document(&email, &message_id, None, None)
+            .await
+            .unwrap();
+
+        // Now it should be processed
+        let exists = storage.is_email_processed(&message_id).await.unwrap();
         assert!(exists);
 
-        tx.rollback().await.unwrap();
+        // Cleanup
+        sqlx::query!(
+            "DELETE FROM email_documents WHERE message_id = $1",
+            message_id
+        )
+        .execute(&storage.pool)
+        .await
+        .unwrap();
     }
 
     #[tokio::test]
