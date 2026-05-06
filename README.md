@@ -100,14 +100,27 @@ git clone https://github.com/an920107/mailsense-mcp.git
 cd mailsense-mcp
 ```
 
+1. **Initialize Database (Podman)**:
+   This project uses PostgreSQL with the `pgvector` extension. We provide a custom Podman setup for easy initialization.
+
+```bash
+# Build the custom Postgres image with pgvector
+podman build -t mailsense-postgres:18 .
+
+# Run the database pod
+podman kube play pod.yaml
+```
+
 1. **Configure Environment**:
    Copy the example environment file and fill in your credentials.
+   Note: The default `DATABASE_URL` in `.env.example` is configured for the Podman setup.
 
 ```bash
 cp .env.example .env
 ```
 
-1. **Initialize Database**:
+1. **Initialize Schema**:
+   Run SQLx migrations to set up the tables and vector indices.
 
 ```bash
 sqlx database create

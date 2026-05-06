@@ -57,6 +57,22 @@ pub trait StorageProvider: Send + Sync {
     /// Mark an email as processed.
     async fn mark_email_processed(&self, message_id: &str) -> anyhow::Result<()>;
 
+    /// Store a processed email document with its embedding and threading info.
+    async fn store_email_document(
+        &self,
+        email: &EmailMessage,
+        thread_id: &str,
+        embedding: Option<Vec<f32>>,
+    ) -> anyhow::Result<()>;
+
+    /// Perform a hybrid search using vector similarity and keyword matching.
+    async fn hybrid_search(
+        &self,
+        query_text: &str,
+        query_embedding: Option<Vec<f32>>,
+        limit: u32,
+    ) -> anyhow::Result<Vec<EmailMessage>>;
+
     /// Enqueue a new background task.
     async fn enqueue_task(
         &self,

@@ -147,6 +147,97 @@ impl StorageProvider for PgStorage {
 
         Ok(())
     }
+
+    async fn store_email_document(
+        &self,
+        email: &crate::domain::EmailMessage,
+        thread_id: &str,
+        embedding: Option<Vec<f32>>,
+    ) -> anyhow::Result<()> {
+        let embedding_vector = embedding.map(pgvector::Vector::from);
+        let date = match chrono::DateTime::parse_from_rfc3339(&email.date) {
+            Ok(dt) => dt.with_timezone(&Utc),
+            Err(_) => Utc::now(), // Fallback
+        };
+
+        sqlx::query(
+            r#"
+            INSERT INTO email_documents (
+                id, message_id, thread_id, in_reply_to, "references", 
+                subject, from_address, body_text, date, embedding
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            ON CONFLICT (message_id) DO UPDATE SET
+                thread_id = EXCLUDED.thread_id,
+                in_reply_to = EXCLUDED.in_reply_to,
+                "references" = EXCLUDED."references",
+                subject = EXCLUDED.subject,
+                from_address = EXCLUDED.from_address,
+                body_text = EXCLUDED.body_text,
+                date = EXCLUDED.date,
+                embedding = EXCLUDED.embedding
+            "#,
+        )
+        .bind(Uuid::new_v4())
+        .bind(&email.message_id)
+        .bind(thread_id)
+        .bind(&email.in_reply_to)
+        .bind(&email.references)
+        .bind(&email.subject)
+        .bind(&email.from)
+        .bind(&email.body)
+        .bind(date)
+        .bind(embedding_vector)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    async fn hybrid_search(
+        &self,
+        query_text: &str,
+        query_embedding: Option<Vec<f32>>,
+        limit: u32,
+    ) -> anyhow::Result<Vec<crate::domain::EmailMessage>> {
+        let embedding_vector = query_embedding.map(pgvector::Vector::from);
+
+        let rows = sqlx::query(
+            r#"
+            SELECT 
+                message_id, thread_id, in_reply_to, "references", subject, from_address, body_text, date
+            FROM email_documents
+            WHERE 
+                search_vector @@ websearch_to_tsquery('english', $1)
+                OR ($2::vector IS NOT NULL)
+            ORDER BY 
+                (ts_rank(search_vector, websearch_to_tsquery('english', $1)) * 0.4 + 
+                 (CASE WHEN $2::vector IS NOT NULL THEN (1.0 / (1.0 + (embedding <-> $2))) ELSE 0 END) * 0.6) DESC
+            LIMIT $3
+            "#,
+        )
+        .bind(query_text)
+        .bind(embedding_vector)
+        .bind(limit as i64)
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut messages = Vec::new();
+        for row in rows {
+            use sqlx::Row;
+            messages.push(crate::domain::EmailMessage {
+                message_id: row.get("message_id"),
+                in_reply_to: row.get("in_reply_to"),
+                references: row.get("references"),
+                subject: row.get("subject"),
+                from: row.get("from_address"),
+                body: row.get("body_text"),
+                date: row.get::<chrono::DateTime<Utc>, _>("date").to_rfc3339(),
+            });
+        }
+
+        Ok(messages)
+    }
 }
 
 #[cfg(test)]
