@@ -107,6 +107,8 @@ pub struct CallToolResult {
 pub enum ToolContent {
     #[serde(rename = "text")]
     Text { text: String },
+    #[serde(rename = "json")]
+    Json { json: serde_json::Value },
 }
 
 #[cfg(test)]

@@ -236,9 +236,7 @@ impl McpServer {
                 });
 
                 Ok(CallToolResult {
-                    content: vec![ToolContent::Text {
-                        text: serde_json::to_string_pretty(&json_results).unwrap(),
-                    }],
+                    content: vec![ToolContent::Json { json: json_results }],
                     is_error: false,
                 })
             }
@@ -270,9 +268,7 @@ impl McpServer {
                 });
 
                 Ok(CallToolResult {
-                    content: vec![ToolContent::Text {
-                        text: serde_json::to_string_pretty(&json_results).unwrap(),
-                    }],
+                    content: vec![ToolContent::Json { json: json_results }],
                     is_error: false,
                 })
             }
