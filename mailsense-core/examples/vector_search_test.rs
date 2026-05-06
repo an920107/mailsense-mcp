@@ -5,20 +5,19 @@ use mailsense_core::storage::PgStorage;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    // 1. 載入配置
+    // 1. 載入配置 (Addressing PR 3193688170: Use explicit env vars for examples)
     dotenvy::dotenv().ok();
-    let config = Config::load().expect("Failed to load .env");
 
-    let gemini_cfg = config.gemini.as_ref().expect("GEMINI_API_KEY missing");
+    let api_key = std::env::var("GEMINI_API_KEY").expect("GEMINI_API_KEY missing");
+    let model = std::env::var("GEMINI_MODEL").expect("GEMINI_MODEL missing");
+    let embedding_model =
+        std::env::var("GEMINI_EMBEDDING_MODEL").expect("GEMINI_EMBEDDING_MODEL missing");
+    let base_url = std::env::var("GEMINI_BASE_URL")
+        .unwrap_or_else(|_| "https://generativelanguage.googleapis.com".to_string());
     let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL missing");
 
     // 2. 初始化組件
-    let client = GeminiClient::new(
-        gemini_cfg.api_key.clone(),
-        gemini_cfg.model.clone(),
-        gemini_cfg.embedding_model.clone(),
-        Some(gemini_cfg.base_url.clone()),
-    );
+    let client = GeminiClient::new(api_key, model, embedding_model, Some(base_url));
     let storage = PgStorage::connect(&database_url).await?;
 
     println!("🚀 Testing Vector Search & Threading Pipeline...");
