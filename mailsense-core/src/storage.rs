@@ -346,4 +346,59 @@ mod tests {
             .await
             .unwrap();
     }
+
+    #[tokio::test]
+    #[ignore]
+    async fn test_email_document_storage_and_hybrid_search() {
+        dotenvy::dotenv().ok();
+        let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+        let storage = PgStorage::connect(&database_url).await.unwrap();
+
+        let email = crate::domain::EmailMessage {
+            message_id: format!("test-search-{}", Uuid::new_v4()),
+            thread_id: None,
+            in_reply_to: None,
+            references: vec![],
+            subject: "Meeting about Rust".to_string(),
+            from: "alice@example.com".to_string(),
+            body: "Let's discuss the new async traits implementation.".to_string(),
+            date: "2026-05-06T10:00:00Z".to_string(),
+            attachments: vec![],
+        };
+
+        // Test Storage (Upsert)
+        storage
+            .store_email_document(&email, "thread-123", None)
+            .await
+            .unwrap();
+
+        // Test Hybrid Search (FTS part)
+        let results = storage.hybrid_search("async traits", None, 5).await.unwrap();
+        assert!(!results.is_empty());
+        assert_eq!(results[0].subject, "Meeting about Rust");
+
+        // Test Storage with Embedding
+        let dummy_embedding = vec![0.1; 768];
+        storage
+            .store_email_document(&email, "thread-123", Some(dummy_embedding.clone()))
+            .await
+            .unwrap();
+
+        // Test Hybrid Search (Vector part)
+        let results = storage
+            .hybrid_search("rust", Some(dummy_embedding), 5)
+            .await
+            .unwrap();
+        assert!(!results.is_empty());
+        assert_eq!(results[0].message_id, email.message_id);
+
+        // Cleanup
+        sqlx::query!(
+            "DELETE FROM email_documents WHERE message_id = $1",
+            email.message_id
+        )
+        .execute(&storage.pool)
+        .await
+        .unwrap();
+    }
 }
