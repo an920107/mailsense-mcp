@@ -14,6 +14,7 @@ serde_json = { workspace = true }
 reqwest = { workspace = true }
 lopdf = { workspace = true }
 sqlx = { workspace = true }
+pgvector = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
