@@ -60,8 +60,8 @@ principles and workflows during all interactions and code generation.
   state (Postgres) to track and skip already-processed entities.
 - **Embedding Formatting**: For `gemini-embedding-2`, strictly follow the
   Task-Specific formatting rules:
-    - **Documents**: `title: {subject} | text: {content}`
-    - **Queries**: `task: search result | query: {query}`
+   - **Documents**: `title: {subject} | text: {content}`
+   - **Queries**: `task: search result | query: {query}`
 - **Deterministic Testing**: Example scripts and manual test cases MUST use
   deterministic data (e.g., fixed IDs) to allow reliable verification of
   idempotency and state-dependent logic.
