@@ -70,6 +70,36 @@ impl StorageProvider for PgStorage {
         }
     }
 
+    async fn get_attachments_by_message_id(
+        &self,
+        message_id: &str,
+    ) -> anyhow::Result<Vec<crate::domain::Attachment>> {
+        let rows = sqlx::query!(
+            r#"
+            SELECT filename, mime_type, data, is_encrypted, is_decrypted, decryption_error
+            FROM email_attachments
+            WHERE message_id = $1
+            "#,
+            message_id
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        let attachments = rows
+            .into_iter()
+            .map(|r| crate::domain::Attachment {
+                filename: r.filename,
+                mime_type: r.mime_type,
+                data: r.data,
+                is_encrypted: r.is_encrypted,
+                is_decrypted: r.is_decrypted,
+                decryption_error: r.decryption_error,
+            })
+            .collect();
+
+        Ok(attachments)
+    }
+
     async fn store_email_document(
         &self,
         email: &crate::domain::EmailMessage,

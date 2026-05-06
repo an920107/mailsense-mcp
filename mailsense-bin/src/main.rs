@@ -1,4 +1,5 @@
 use chrono::{DateTime, Utc};
+use futures::StreamExt;
 use mailsense_core::config::Config;
 use mailsense_core::domain::{EmailProvider, LlmProvider, StorageProvider};
 use mailsense_core::llm::GeminiClient;
@@ -59,10 +60,10 @@ async fn main() -> anyhow::Result<()> {
             );
 
             match run_ingestion_since(
-                worker_email.as_ref(),
-                worker_llm.as_ref(),
-                worker_storage.as_ref(),
-                worker_personal_config.as_ref(),
+                worker_email.clone(),
+                worker_llm.clone(),
+                worker_storage.clone(),
+                worker_personal_config.clone(),
                 since,
             )
             .await
@@ -90,10 +91,10 @@ async fn main() -> anyhow::Result<()> {
 }
 
 async fn run_ingestion_since(
-    email_provider: &dyn EmailProvider,
-    llm: &dyn LlmProvider,
-    storage: &dyn StorageProvider,
-    personal_config: &Option<mailsense_core::config::PersonalConfig>,
+    email_provider: Arc<dyn EmailProvider>,
+    llm: Arc<dyn LlmProvider>,
+    storage: Arc<dyn StorageProvider>,
+    personal_config: Arc<Option<mailsense_core::config::PersonalConfig>>,
     since: DateTime<Utc>,
 ) -> anyhow::Result<usize> {
     let emails = email_provider.fetch_since(since).await?;
@@ -101,95 +102,119 @@ async fn run_ingestion_since(
 }
 
 async fn process_emails(
-    mut emails: Vec<mailsense_core::domain::EmailMessage>,
-    llm: &dyn LlmProvider,
-    storage: &dyn StorageProvider,
-    personal_config: &Option<mailsense_core::config::PersonalConfig>,
+    emails: Vec<mailsense_core::domain::EmailMessage>,
+    llm: Arc<dyn LlmProvider>,
+    storage: Arc<dyn StorageProvider>,
+    personal_config: Arc<Option<mailsense_core::config::PersonalConfig>>,
 ) -> anyhow::Result<usize> {
-    let mut processed_count = 0;
+    let processed_count = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let concurrency_limit = 5;
 
-    for email in &mut emails {
-        if !storage.is_email_processed(&email.message_id).await? {
-            tracing::info!("Processing new email: {}", email.subject);
+    let stream = futures::stream::iter(emails).map(|mut email| {
+        let llm = llm.clone();
+        let storage = storage.clone();
+        let personal_config = personal_config.clone();
+        let processed_count = processed_count.clone();
 
-            // 1. Generate multi-modal embedding
-            let embedding = llm.generate_embedding(email).await?;
+        async move {
+            if !storage.is_email_processed(&email.message_id).await? {
+                tracing::info!("Processing new email: {}", email.subject);
 
-            // 2. Perform deep analysis
-            let analysis = match llm.analyze_email(email).await {
-                Ok(a) => Some(a),
-                Err(e) => {
-                    tracing::warn!("Failed to analyze email {}: {}", email.message_id, e);
-                    None
-                }
-            };
+                // 1. Generate multi-modal embedding
+                let embedding = llm.generate_embedding(&email).await?;
 
-            // 2.5 Attempt PDF decryption if personal config is present
-            if let Some(cfg) = personal_config {
-                let recipes = analysis.as_ref().and_then(|a| a.password_recipes.as_ref());
-                let builder = mailsense_core::password::PasswordPoolBuilder::new(cfg);
-                let pool = builder.build(email, recipes);
+                // 2. Perform deep analysis
+                let analysis = match llm.analyze_email(&email).await {
+                    Ok(a) => Some(a),
+                    Err(e) => {
+                        tracing::warn!("Failed to analyze email {}: {}", email.message_id, e);
+                        None
+                    }
+                };
 
-                for attachment in &mut email.attachments {
-                    if attachment.mime_type.to_lowercase() == "application/pdf" {
-                        tracing::info!(
-                            "Attempting to decrypt PDF attachment: {}",
-                            attachment.filename
-                        );
-                        attachment.is_encrypted = true; // Assume encrypted until proven otherwise or check with lopdf
+                // 2.5 Attempt PDF decryption if personal config is present
+                if let Some(cfg) = personal_config.as_ref() {
+                    let recipes = analysis.as_ref().and_then(|a| a.password_recipes.as_ref());
+                    let builder = mailsense_core::password::PasswordPoolBuilder::new(cfg);
+                    let pool = builder.build(&email, recipes);
 
-                        // We do a quick check if it's actually encrypted by trying to load it
-                        if let Ok(doc) = lopdf::Document::load_mem(&attachment.data)
-                            && !doc.is_encrypted()
-                        {
-                            attachment.is_encrypted = false;
-                            attachment.is_decrypted = true;
-                            continue;
-                        }
+                    for attachment in &mut email.attachments {
+                        if attachment.mime_type.to_lowercase() == "application/pdf" {
+                            tracing::info!(
+                                "Attempting to decrypt PDF attachment: {}",
+                                attachment.filename
+                            );
+                            attachment.is_encrypted = true;
 
-                        match mailsense_core::pdf::decrypt_pdf_with_timeout(&attachment.data, &pool)
-                            .await
-                        {
-                            Ok(Some(decrypted_bytes)) => {
-                                tracing::info!("Successfully decrypted {}", attachment.filename);
-                                attachment.data = decrypted_bytes;
+                            // We do a quick check if it's actually encrypted by trying to load it
+                            if let Ok(doc) = lopdf::Document::load_mem(&attachment.data)
+                                && !doc.is_encrypted()
+                            {
+                                attachment.is_encrypted = false;
                                 attachment.is_decrypted = true;
+                                continue;
                             }
-                            Ok(None) => {
-                                tracing::warn!(
-                                    "Failed to find correct password for {}",
-                                    attachment.filename
-                                );
-                                attachment.decryption_error =
-                                    Some("Password not found in pool".to_string());
-                            }
-                            Err(e) => {
-                                tracing::error!(
-                                    "Decryption error for {}: {}",
-                                    attachment.filename,
-                                    e
-                                );
-                                attachment.decryption_error = Some(e.to_string());
+
+                            match mailsense_core::pdf::decrypt_pdf_with_timeout(
+                                &attachment.data,
+                                &pool,
+                            )
+                            .await
+                            {
+                                Ok(Some(decrypted_bytes)) => {
+                                    tracing::info!(
+                                        "Successfully decrypted {}",
+                                        attachment.filename
+                                    );
+                                    attachment.data = decrypted_bytes;
+                                    attachment.is_decrypted = true;
+                                }
+                                Ok(None) => {
+                                    tracing::warn!(
+                                        "Failed to find correct password for {}",
+                                        attachment.filename
+                                    );
+                                    attachment.decryption_error =
+                                        Some("Password not found in pool".to_string());
+                                }
+                                Err(e) => {
+                                    tracing::error!(
+                                        "Decryption error for {}: {}",
+                                        attachment.filename,
+                                        e
+                                    );
+                                    attachment.decryption_error = Some(e.to_string());
+                                }
                             }
                         }
                     }
                 }
+
+                // 3. Store document
+                let thread_id = email
+                    .thread_id
+                    .as_deref()
+                    .unwrap_or(&email.message_id)
+                    .to_string();
+
+                storage
+                    .store_email_document(&email, &thread_id, Some(embedding), analysis)
+                    .await?;
+
+                processed_count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             }
-
-            // 3. Store document
-            let thread_id = email
-                .thread_id
-                .as_deref()
-                .unwrap_or(&email.message_id)
-                .to_string();
-
-            storage
-                .store_email_document(email, &thread_id, Some(embedding), analysis)
-                .await?;
-
-            processed_count += 1;
+            Ok::<(), anyhow::Error>(())
         }
+    });
+
+    // Execute concurrently
+    let results: Vec<anyhow::Result<()>> =
+        stream.buffer_unordered(concurrency_limit).collect().await;
+
+    // Check for any critical errors
+    for res in results {
+        res?;
     }
 
-    Ok(processed_count)
+    Ok(processed_count.load(std::sync::atomic::Ordering::SeqCst))
 }

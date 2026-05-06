@@ -113,6 +113,38 @@ impl McpServer {
                                 "required": ["query"]
                             }),
                         },
+                        Tool {
+                            name: "mailsense_list_attachments".to_string(),
+                            description: "List all attachments for a specific email by its Message-ID.".to_string(),
+                            input_schema: json!({
+                                "type": "object",
+                                "properties": {
+                                    "message_id": {
+                                        "type": "string",
+                                        "description": "The Message-ID of the email"
+                                    }
+                                },
+                                "required": ["message_id"]
+                            }),
+                        },
+                        Tool {
+                            name: "mailsense_read_attachment".to_string(),
+                            description: "Read the content of a specific attachment. Returns text for documents or base64 for images.".to_string(),
+                            input_schema: json!({
+                                "type": "object",
+                                "properties": {
+                                    "message_id": {
+                                        "type": "string",
+                                        "description": "The Message-ID of the email"
+                                    },
+                                    "filename": {
+                                        "type": "string",
+                                        "description": "The filename of the attachment to read"
+                                    }
+                                },
+                                "required": ["message_id", "filename"]
+                            }),
+                        },
                     ],
                 };
 
@@ -212,6 +244,80 @@ impl McpServer {
                     content: vec![ToolContent::Text { text }],
                     is_error: false,
                 })
+            }
+            "mailsense_list_attachments" => {
+                let message_id = params.arguments["message_id"]
+                    .as_str()
+                    .ok_or_else(|| anyhow::anyhow!("Missing 'message_id' argument"))?;
+
+                let attachments = self
+                    .storage
+                    .get_attachments_by_message_id(message_id)
+                    .await?;
+
+                let mut text = format!("Found {} attachments:\n\n", attachments.len());
+                for (i, att) in attachments.iter().enumerate() {
+                    let status = if att.is_decrypted {
+                        "Decrypted"
+                    } else if att.is_encrypted {
+                        "Encrypted (Failed)"
+                    } else {
+                        "No Encryption"
+                    };
+                    text.push_str(&format!(
+                        "{}. {} (MIME: {}) - Status: {}\n",
+                        i + 1,
+                        att.filename,
+                        att.mime_type,
+                        status
+                    ));
+                }
+
+                Ok(CallToolResult {
+                    content: vec![ToolContent::Text { text }],
+                    is_error: false,
+                })
+            }
+            "mailsense_read_attachment" => {
+                let message_id = params.arguments["message_id"]
+                    .as_str()
+                    .ok_or_else(|| anyhow::anyhow!("Missing 'message_id' argument"))?;
+                let filename = params.arguments["filename"]
+                    .as_str()
+                    .ok_or_else(|| anyhow::anyhow!("Missing 'filename' argument"))?;
+
+                let attachments = self
+                    .storage
+                    .get_attachments_by_message_id(message_id)
+                    .await?;
+                let attachment = attachments.into_iter().find(|a| a.filename == filename);
+
+                if let Some(att) = attachment {
+                    let content = if att.mime_type.starts_with("text/") {
+                        ToolContent::Text {
+                            text: String::from_utf8_lossy(&att.data).to_string(),
+                        }
+                    } else {
+                        // For images or PDFs, return as base64 (future enhancement: specialized data types if needed)
+                        use base64::Engine;
+                        let b64 = base64::engine::general_purpose::STANDARD.encode(&att.data);
+                        ToolContent::Text {
+                            text: format!("(Binary data encoded in Base64)\n{}", b64),
+                        }
+                    };
+
+                    Ok(CallToolResult {
+                        content: vec![content],
+                        is_error: false,
+                    })
+                } else {
+                    Ok(CallToolResult {
+                        content: vec![ToolContent::Text {
+                            text: format!("Attachment '{}' not found.", filename),
+                        }],
+                        is_error: true,
+                    })
+                }
             }
             _ => Err(anyhow::anyhow!("Unknown tool: {}", params.name)),
         }

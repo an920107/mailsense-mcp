@@ -49,6 +49,12 @@ pub trait StorageProvider: Send + Sync {
     /// Get an email by its Message-ID.
     async fn get_email_by_id(&self, message_id: &str) -> anyhow::Result<Option<EmailMessage>>;
 
+    /// Get all attachments for a specific Message-ID.
+    async fn get_attachments_by_message_id(
+        &self,
+        message_id: &str,
+    ) -> anyhow::Result<Vec<Attachment>>;
+
     /// Store a processed email document with its embedding and threading info.
     async fn store_email_document(
         &self,

@@ -1339,6 +1339,7 @@ dependencies = [
  "anyhow",
  "chrono",
  "dotenvy",
+ "futures",
  "lopdf",
  "mailsense-core",
  "mailsense-imap",
@@ -1395,6 +1396,7 @@ name = "mailsense-mcp"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "base64",
  "mailsense-core",
  "serde",
  "serde_json",
