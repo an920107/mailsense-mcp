@@ -261,7 +261,7 @@ impl McpServer {
 
                 let attachments = self
                     .storage
-                    .get_attachments_by_message_id(message_id)
+                    .get_attachment_metadata_by_message_id(message_id)
                     .await?;
 
                 let json_results = json!({
@@ -294,28 +294,32 @@ impl McpServer {
                     .as_str()
                     .ok_or_else(|| anyhow::anyhow!("Missing 'filename' argument"))?;
 
-                let attachments = self
+                let attachment_opt = self
                     .storage
-                    .get_attachments_by_message_id(message_id)
+                    .get_attachment_by_name(message_id, filename)
                     .await?;
-                let attachment = attachments.into_iter().find(|a| a.filename == filename);
 
-                if let Some(att) = attachment {
-                    let content = if att.mime_type.starts_with("text/") {
-                        ToolContent::Text {
-                            text: String::from_utf8_lossy(&att.data).to_string(),
-                        }
+                if let Some(att) = attachment_opt {
+                    let json_res = if att.mime_type.starts_with("text/") {
+                        json!({
+                            "filename": att.filename,
+                            "mime_type": att.mime_type,
+                            "content": String::from_utf8_lossy(&att.data).to_string(),
+                            "encoding": "text"
+                        })
                     } else {
-                        // For images or PDFs, return as base64 (future enhancement: specialized data types if needed)
                         use base64::Engine;
                         let b64 = base64::engine::general_purpose::STANDARD.encode(&att.data);
-                        ToolContent::Text {
-                            text: format!("(Binary data encoded in Base64)\n{}", b64),
-                        }
+                        json!({
+                            "filename": att.filename,
+                            "mime_type": att.mime_type,
+                            "content": b64,
+                            "encoding": "base64"
+                        })
                     };
 
                     Ok(CallToolResult {
-                        content: vec![content],
+                        content: vec![ToolContent::Json { json: json_res }],
                         is_error: false,
                     })
                 } else {

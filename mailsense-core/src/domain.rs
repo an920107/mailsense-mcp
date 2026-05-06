@@ -52,10 +52,24 @@ pub trait StorageProvider: Send + Sync {
     async fn get_email_by_id(&self, message_id: &str) -> anyhow::Result<Option<EmailMessage>>;
 
     /// Get all attachments for a specific Message-ID.
+    /// Warning: This fetches full binary data for all attachments.
     async fn get_attachments_by_message_id(
         &self,
         message_id: &str,
     ) -> anyhow::Result<Vec<Attachment>>;
+
+    /// Get metadata (no binary data) for all attachments of a specific Message-ID.
+    async fn get_attachment_metadata_by_message_id(
+        &self,
+        message_id: &str,
+    ) -> anyhow::Result<Vec<Attachment>>;
+
+    /// Get a specific attachment by Message-ID and filename.
+    async fn get_attachment_by_name(
+        &self,
+        message_id: &str,
+        filename: &str,
+    ) -> anyhow::Result<Option<Attachment>>;
 
     /// Store a processed email document with its embedding and threading info.
     async fn store_email_document(

@@ -121,6 +121,67 @@ impl StorageProvider for PgStorage {
         Ok(attachments)
     }
 
+    async fn get_attachment_metadata_by_message_id(
+        &self,
+        message_id: &str,
+    ) -> anyhow::Result<Vec<crate::domain::Attachment>> {
+        let rows = sqlx::query!(
+            r#"
+            SELECT filename, mime_type, is_encrypted, is_decrypted, decryption_error
+            FROM email_attachments
+            WHERE message_id = $1
+            "#,
+            message_id
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        let attachments = rows
+            .into_iter()
+            .map(|r| crate::domain::Attachment {
+                filename: r.filename,
+                mime_type: r.mime_type,
+                data: vec![], // No binary data for metadata-only query
+                is_encrypted: r.is_encrypted,
+                is_decrypted: r.is_decrypted,
+                decryption_error: r.decryption_error,
+            })
+            .collect();
+
+        Ok(attachments)
+    }
+
+    async fn get_attachment_by_name(
+        &self,
+        message_id: &str,
+        filename: &str,
+    ) -> anyhow::Result<Option<crate::domain::Attachment>> {
+        let row = sqlx::query!(
+            r#"
+            SELECT filename, mime_type, data, is_encrypted, is_decrypted, decryption_error
+            FROM email_attachments
+            WHERE message_id = $1 AND filename = $2
+            "#,
+            message_id,
+            filename
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+
+        if let Some(r) = row {
+            Ok(Some(crate::domain::Attachment {
+                filename: r.filename,
+                mime_type: r.mime_type,
+                data: r.data,
+                is_encrypted: r.is_encrypted,
+                is_decrypted: r.is_decrypted,
+                decryption_error: r.decryption_error,
+            }))
+        } else {
+            Ok(None)
+        }
+    }
+
     async fn store_email_document(
         &self,
         email: &crate::domain::EmailMessage,
