@@ -34,6 +34,9 @@ principles and workflows during all interactions and code generation.
   implemented using safe, idiomatic Rust. If a standard library function is
   marked as unsafe (e.g., `std::env::set_var` in Edition 2024), find a safe
   alternative or refactor the architecture to avoid its need.
+- **Mandatory Pre-commit Checks**: Before every commit, you MUST run `cargo fmt
+  --all`, `cargo clippy --workspace --all-targets -- -D warnings`, and `mdl` on
+  modified markdown files. Ensure CI-readiness locally to prevent broken builds.
 
 ## 3. Rust Ecosystem & Workspace Management
 

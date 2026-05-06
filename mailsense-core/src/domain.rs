@@ -46,18 +46,6 @@ pub struct Task {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ProcessedEmail {
-    pub id: Uuid,
-    pub message_id: String,
-    pub processed_at: DateTime<Utc>,
-}
-
-#[async_trait]
-pub trait EmailProvider: Send + Sync {
-    async fn fetch_recent(&self, limit: u32) -> anyhow::Result<Vec<EmailMessage>>;
-}
-
 #[async_trait]
 pub trait StorageProvider: Send + Sync {
     /// Check if an email has already been processed by its Message-ID.
@@ -80,6 +68,12 @@ pub trait StorageProvider: Send + Sync {
     async fn update_task_status(&self, id: Uuid, status: TaskStatus) -> anyhow::Result<()>;
 }
 
+#[async_trait]
+pub trait EmailProvider: Send + Sync {
+    /// Fetch the latest `limit` emails from the provider.
+    async fn fetch_recent(&self, limit: u32) -> anyhow::Result<Vec<EmailMessage>>;
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum EmailIntent {
     ActionRequired,
@@ -88,16 +82,43 @@ pub enum EmailIntent {
     Spam,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "type")]
+pub enum PasswordComponent {
+    #[serde(rename = "ID")]
+    Id {
+        #[serde(default = "default_operation")]
+        operation: String, // "Full", "First", "Last"
+        length: Option<usize>,
+    },
+    #[serde(rename = "Bday")]
+    Bday {
+        #[serde(default = "default_bday_format")]
+        format: String, // "YYYYMMDD", "MMDD", "YYMMDD", "YYMM", "MINGUO"
+    },
+    #[serde(rename = "Literal")]
+    Literal { value: String },
+}
+
+fn default_operation() -> String {
+    "Full".to_string()
+}
+
+fn default_bday_format() -> String {
+    "YYYYMMDD".to_string()
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EmailAnalysis {
     pub intent: EmailIntent,
     pub tags: Vec<String>,
     pub summary: String,
-    pub extracted_deadlines: Vec<DateTime<Utc>>,
+    pub extracted_deadlines: Vec<String>,
+    pub password_recipes: Option<Vec<Vec<PasswordComponent>>>,
 }
 
 #[async_trait]
 pub trait LlmProvider: Send + Sync {
-    /// Analyzes an email to categorize it, summarize it, and extract potential deadlines.
+    /// Analyzes an email to categorize it, summarize it, and extract potential deadlines and password recipes.
     async fn analyze_email(&self, email: &EmailMessage) -> anyhow::Result<EmailAnalysis>;
 }

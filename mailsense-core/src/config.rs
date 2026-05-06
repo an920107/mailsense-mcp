@@ -7,6 +7,7 @@ pub struct Config {
     pub log_level: String,
     pub imap: ImapConfig,
     pub gemini: Option<GeminiConfig>,
+    pub personal: Option<PersonalConfig>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -23,6 +24,12 @@ pub struct GeminiConfig {
     pub api_key: String,
     pub model: String,
     pub base_url: String,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct PersonalConfig {
+    pub id_number: String,
+    pub birthday: String,
 }
 
 impl Config {
@@ -61,11 +68,27 @@ impl Config {
                     .unwrap_or_else(|_| "https://generativelanguage.googleapis.com".to_string()),
             });
 
+        let personal = std::env::var("USER_ID_NUMBER").ok().and_then(|id_number| {
+            std::env::var("USER_BIRTHDAY").ok().and_then(|birthday| {
+                // Basic validation: ID needs at least 4 chars, Birthday at least 8 (YYYYMMDD)
+                if id_number.len() >= 4 && birthday.len() >= 8 {
+                    Some(PersonalConfig {
+                        id_number,
+                        birthday,
+                    })
+                } else {
+                    tracing::warn!("Personal config ignored: USER_ID_NUMBER must be >= 4 chars and USER_BIRTHDAY must be >= 8 chars (YYYYMMDD)");
+                    None
+                }
+            })
+        });
+
         Ok(Self {
             database_url,
             log_level,
             imap,
             gemini,
+            personal,
         })
     }
 
@@ -120,11 +143,25 @@ impl Config {
                 .unwrap_or_else(|| "https://generativelanguage.googleapis.com".to_string()),
         });
 
+        let personal = map.get("USER_ID_NUMBER").and_then(|id_number| {
+            map.get("USER_BIRTHDAY").and_then(|birthday| {
+                if id_number.len() >= 4 && birthday.len() >= 8 {
+                    Some(PersonalConfig {
+                        id_number: id_number.clone(),
+                        birthday: birthday.clone(),
+                    })
+                } else {
+                    None
+                }
+            })
+        });
+
         Ok(Self {
             database_url,
             log_level,
             imap,
             gemini,
+            personal,
         })
     }
 }
@@ -153,6 +190,8 @@ mod tests {
             "GEMINI_BASE_URL".to_string(),
             "https://example.com".to_string(),
         );
+        map.insert("USER_ID_NUMBER".to_string(), "A123456789".to_string());
+        map.insert("USER_BIRTHDAY".to_string(), "19900101".to_string());
 
         let config = Config::from_map(map).expect("Failed to load config");
         assert_eq!(config.database_url, "postgres://test:test@localhost/test");
@@ -167,6 +206,10 @@ mod tests {
         assert_eq!(gemini.api_key, "gemini-key");
         assert_eq!(gemini.model, "gemini-1.5-pro");
         assert_eq!(gemini.base_url, "https://example.com");
+
+        let personal = config.personal.expect("Personal config should be present");
+        assert_eq!(personal.id_number, "A123456789");
+        assert_eq!(personal.birthday, "19900101");
     }
 
     #[test]
@@ -182,5 +225,6 @@ mod tests {
 
         let config = Config::from_map(map).expect("Failed to load config");
         assert!(config.gemini.is_none());
+        assert!(config.personal.is_none());
     }
 }
