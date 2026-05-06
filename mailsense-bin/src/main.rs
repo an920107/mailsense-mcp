@@ -157,10 +157,9 @@ async fn process_emails(
                                 && !doc.is_encrypted()
                             {
                                 attachment.is_encrypted = false;
-                                attachment.is_decrypted = true;
+                                attachment.is_decrypted = false; // It's not decrypted, it was never encrypted
                                 continue;
                             }
-
                             match mailsense_core::pdf::decrypt_pdf_with_timeout(
                                 &attachment.data,
                                 &pool,

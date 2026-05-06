@@ -536,6 +536,7 @@ mod tests {
             body: "look at this".to_string(),
             date: "2026-05-04".to_string(),
             attachments: vec![Attachment {
+                id: None,
                 filename: "test.png".to_string(),
                 mime_type: "image/png".to_string(),
                 data: vec![1, 2, 3],

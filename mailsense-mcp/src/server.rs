@@ -92,7 +92,7 @@ impl McpServer {
                     tools: vec![
                         Tool {
                             name: "mailsense_search_emails".to_string(),
-                            description: "Search emails using semantic similarity and keyword matching, with optional intent filtering. Returns detailed analysis including summaries, deadlines, and password recipes.".to_string(),
+                            description: "Search emails using semantic similarity and keyword matching, with optional intent filtering. Returns detailed analysis including summaries and deadlines.".to_string(),
                             input_schema: json!({
                                 "type": "object",
                                 "properties": {
@@ -115,7 +115,7 @@ impl McpServer {
                         },
                         Tool {
                             name: "mailsense_list_attachments".to_string(),
-                            description: "List all attachments for a specific email by its Message-ID.".to_string(),
+                            description: "List all attachments for a specific email by its Message-ID. Returns attachment IDs for reading specific content.".to_string(),
                             input_schema: json!({
                                 "type": "object",
                                 "properties": {
@@ -129,20 +129,16 @@ impl McpServer {
                         },
                         Tool {
                             name: "mailsense_read_attachment".to_string(),
-                            description: "Read the content of a specific attachment. Returns text for documents or base64 for images.".to_string(),
+                            description: "Read the content of a specific attachment using its Attachment ID. Returns text for documents or base64 for images/PDFs.".to_string(),
                             input_schema: json!({
                                 "type": "object",
                                 "properties": {
-                                    "message_id": {
+                                    "attachment_id": {
                                         "type": "string",
-                                        "description": "The Message-ID of the email"
-                                    },
-                                    "filename": {
-                                        "type": "string",
-                                        "description": "The filename of the attachment to read"
+                                        "description": "The stable ID of the attachment (UUID)"
                                     }
                                 },
-                                "required": ["message_id", "filename"]
+                                "required": ["attachment_id"]
                             }),
                         },
                         Tool {
@@ -170,24 +166,38 @@ impl McpServer {
                 })
             }
             "tools/call" => {
-                let params: CallToolParams =
-                    serde_json::from_value(req.params.unwrap_or_default()).ok()?;
-                let result = self.handle_tool_call(params).await;
+                let params_res: Result<CallToolParams, _> =
+                    serde_json::from_value(req.params.unwrap_or_default());
 
-                match result {
-                    Ok(res) => Some(JsonRpcResponse {
-                        jsonrpc: "2.0".to_string(),
-                        id: req.id,
-                        result: Some(serde_json::to_value(res).unwrap()),
-                        error: None,
-                    }),
+                match params_res {
+                    Ok(params) => {
+                        let result = self.handle_tool_call(params).await;
+                        match result {
+                            Ok(res) => Some(JsonRpcResponse {
+                                jsonrpc: "2.0".to_string(),
+                                id: req.id,
+                                result: Some(serde_json::to_value(res).unwrap()),
+                                error: None,
+                            }),
+                            Err(e) => Some(JsonRpcResponse {
+                                jsonrpc: "2.0".to_string(),
+                                id: req.id,
+                                result: None,
+                                error: Some(crate::protocol::JsonRpcError {
+                                    code: -32603,
+                                    message: e.to_string(),
+                                    data: None,
+                                }),
+                            }),
+                        }
+                    }
                     Err(e) => Some(JsonRpcResponse {
                         jsonrpc: "2.0".to_string(),
                         id: req.id,
                         result: None,
                         error: Some(crate::protocol::JsonRpcError {
-                            code: -32603,
-                            message: e.to_string(),
+                            code: -32602,
+                            message: format!("Invalid params: {}", e),
                             data: None,
                         }),
                     }),
@@ -208,19 +218,27 @@ impl McpServer {
                     .ok_or_else(|| anyhow::anyhow!("Missing 'query' argument"))?;
                 let limit = params.arguments["limit"].as_u64().unwrap_or(5) as u32;
 
-                let intent = params
-                    .arguments
-                    .get("intent")
-                    .and_then(|i| i.as_str())
-                    .and_then(|s| match s {
+                let intent = if let Some(i) = params.arguments.get("intent") {
+                    let s = i
+                        .as_str()
+                        .ok_or_else(|| anyhow::anyhow!("'intent' must be a string"))?;
+                    match s {
                         "ActionRequired" => {
                             Some(mailsense_core::domain::EmailIntent::ActionRequired)
                         }
                         "FYI" => Some(mailsense_core::domain::EmailIntent::FYI),
                         "Update" => Some(mailsense_core::domain::EmailIntent::Update),
                         "Spam" => Some(mailsense_core::domain::EmailIntent::Spam),
-                        _ => None,
-                    });
+                        _ => {
+                            return Err(anyhow::anyhow!(
+                                "Unknown intent '{}'. Allowed values: ActionRequired, FYI, Update, Spam",
+                                s
+                            ));
+                        }
+                    }
+                } else {
+                    None
+                };
 
                 let embedding = self.llm.generate_query_embedding(query).await?;
                 let results = self
@@ -268,6 +286,7 @@ impl McpServer {
                     "count": attachments.len(),
                     "attachments": attachments.iter().map(|att| {
                         json!({
+                            "attachment_id": att.id,
                             "filename": att.filename,
                             "mime_type": att.mime_type,
                             "status": if att.is_decrypted {
@@ -287,17 +306,13 @@ impl McpServer {
                 })
             }
             "mailsense_read_attachment" => {
-                let message_id = params.arguments["message_id"]
+                let attachment_id_str = params.arguments["attachment_id"]
                     .as_str()
-                    .ok_or_else(|| anyhow::anyhow!("Missing 'message_id' argument"))?;
-                let filename = params.arguments["filename"]
-                    .as_str()
-                    .ok_or_else(|| anyhow::anyhow!("Missing 'filename' argument"))?;
+                    .ok_or_else(|| anyhow::anyhow!("Missing 'attachment_id' argument"))?;
+                let attachment_id = uuid::Uuid::parse_str(attachment_id_str)
+                    .map_err(|e| anyhow::anyhow!("Invalid 'attachment_id' UUID: {}", e))?;
 
-                let attachment_opt = self
-                    .storage
-                    .get_attachment_by_name(message_id, filename)
-                    .await?;
+                let attachment_opt = self.storage.get_attachment_by_id(attachment_id).await?;
 
                 if let Some(att) = attachment_opt {
                     let json_res = if att.mime_type.starts_with("text/") {
@@ -325,7 +340,7 @@ impl McpServer {
                 } else {
                     Ok(CallToolResult {
                         content: vec![ToolContent::Text {
-                            text: format!("Attachment '{}' not found.", filename),
+                            text: format!("Attachment with ID '{}' not found.", attachment_id),
                         }],
                         is_error: true,
                     })

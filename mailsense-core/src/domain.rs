@@ -5,6 +5,7 @@ use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Attachment {
+    pub id: Option<Uuid>,
     pub filename: String,
     pub mime_type: String,
     pub data: Vec<u8>,
@@ -64,12 +65,9 @@ pub trait StorageProvider: Send + Sync {
         message_id: &str,
     ) -> anyhow::Result<Vec<Attachment>>;
 
-    /// Get a specific attachment by Message-ID and filename.
-    async fn get_attachment_by_name(
-        &self,
-        message_id: &str,
-        filename: &str,
-    ) -> anyhow::Result<Option<Attachment>>;
+    /// Get a specific attachment by its unique internal ID.
+    async fn get_attachment_by_id(&self, attachment_id: Uuid)
+    -> anyhow::Result<Option<Attachment>>;
 
     /// Store a processed email document with its embedding and threading info.
     async fn store_email_document(

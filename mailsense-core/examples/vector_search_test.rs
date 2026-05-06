@@ -55,6 +55,7 @@ async fn main() -> anyhow::Result<()> {
             .to_string(),
         date: "2026-05-01T11:00:00Z".to_string(),
         attachments: vec![Attachment {
+            id: None,
             filename: "architecture.png".to_string(),
             mime_type: "image/png".to_string(),
             // A valid 1x1 transparent PNG

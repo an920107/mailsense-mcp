@@ -97,7 +97,7 @@ impl StorageProvider for PgStorage {
     ) -> anyhow::Result<Vec<crate::domain::Attachment>> {
         let rows = sqlx::query!(
             r#"
-            SELECT filename, mime_type, data, is_encrypted, is_decrypted, decryption_error
+            SELECT id, filename, mime_type, data, is_encrypted, is_decrypted, decryption_error
             FROM email_attachments
             WHERE message_id = $1
             "#,
@@ -109,6 +109,7 @@ impl StorageProvider for PgStorage {
         let attachments = rows
             .into_iter()
             .map(|r| crate::domain::Attachment {
+                id: Some(r.id),
                 filename: r.filename,
                 mime_type: r.mime_type,
                 data: r.data,
@@ -127,7 +128,7 @@ impl StorageProvider for PgStorage {
     ) -> anyhow::Result<Vec<crate::domain::Attachment>> {
         let rows = sqlx::query!(
             r#"
-            SELECT filename, mime_type, is_encrypted, is_decrypted, decryption_error
+            SELECT id, filename, mime_type, is_encrypted, is_decrypted, decryption_error
             FROM email_attachments
             WHERE message_id = $1
             "#,
@@ -139,6 +140,7 @@ impl StorageProvider for PgStorage {
         let attachments = rows
             .into_iter()
             .map(|r| crate::domain::Attachment {
+                id: Some(r.id),
                 filename: r.filename,
                 mime_type: r.mime_type,
                 data: vec![], // No binary data for metadata-only query
@@ -151,25 +153,24 @@ impl StorageProvider for PgStorage {
         Ok(attachments)
     }
 
-    async fn get_attachment_by_name(
+    async fn get_attachment_by_id(
         &self,
-        message_id: &str,
-        filename: &str,
+        attachment_id: Uuid,
     ) -> anyhow::Result<Option<crate::domain::Attachment>> {
         let row = sqlx::query!(
             r#"
             SELECT filename, mime_type, data, is_encrypted, is_decrypted, decryption_error
             FROM email_attachments
-            WHERE message_id = $1 AND filename = $2
+            WHERE id = $1
             "#,
-            message_id,
-            filename
+            attachment_id
         )
         .fetch_optional(&self.pool)
         .await?;
 
         if let Some(r) = row {
             Ok(Some(crate::domain::Attachment {
+                id: Some(attachment_id),
                 filename: r.filename,
                 mime_type: r.mime_type,
                 data: r.data,

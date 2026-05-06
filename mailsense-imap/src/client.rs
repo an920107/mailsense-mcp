@@ -101,6 +101,7 @@ impl ImapClient {
             let data = part.contents().to_vec();
 
             attachments.push(mailsense_core::domain::Attachment {
+                id: None,
                 filename,
                 mime_type,
                 data,
