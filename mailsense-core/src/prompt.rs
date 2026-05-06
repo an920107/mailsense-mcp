@@ -32,11 +32,21 @@ Follow these rules:
    }
 
    ### EXAMPLE 2 (Date window)
-   Input Body: "The password is your boarding date (YYYYMMDD)."
+   Input Body: "The password is your birthday (YYYYMMDD)."
    Output: {
-     ...
+     "intent": "FYI",
+     "tags": ["Travel", "Ticket"],
+     "summary": "Electronic ticket with birthday password.",
+     "extracted_deadlines": [],
      "password_recipes": [[{"type": "Bday", "format": "YYYYMMDD"}]]
    }
 
 Your response MUST be a valid JSON object.
 "#;
+
+pub fn generate_analysis_prompt(email: &crate::domain::EmailMessage) -> String {
+    format!(
+        "{}\n\nEmail Subject: {}\nEmail From: {}\nEmail Date: {}\nEmail Body:\n{}",
+        SYSTEM_INSTRUCTIONS, email.subject, email.from, email.date, email.body
+    )
+}
