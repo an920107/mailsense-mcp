@@ -1,3 +1,4 @@
+use anyhow::Context;
 use chrono::{DateTime, Utc};
 use futures::StreamExt;
 use mailsense_core::config::Config;
@@ -25,7 +26,10 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!("Configuration loaded.");
 
     // 3. Initialize Providers
-    let gemini_cfg = config.gemini.as_ref().expect("Gemini config missing");
+    let gemini_cfg = config
+        .gemini
+        .as_ref()
+        .context("Gemini configuration is missing in .env (GEMINI_API_KEY, etc.)")?;
     let llm = Arc::new(GeminiClient::new(
         gemini_cfg.api_key.clone(),
         gemini_cfg.model.clone(),
