@@ -87,15 +87,25 @@ pub enum EmailIntent {
 pub enum PasswordComponent {
     #[serde(rename = "ID")]
     Id {
+        #[serde(default = "default_operation")]
         operation: String, // "Full", "First", "Last"
         length: Option<usize>,
     },
     #[serde(rename = "Bday")]
     Bday {
+        #[serde(default = "default_bday_format")]
         format: String, // "YYYYMMDD", "MMDD", "YYMMDD", "YYMM", "MINGUO"
     },
     #[serde(rename = "Literal")]
     Literal { value: String },
+}
+
+fn default_operation() -> String {
+    "Full".to_string()
+}
+
+fn default_bday_format() -> String {
+    "YYYYMMDD".to_string()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
