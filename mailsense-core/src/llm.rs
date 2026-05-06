@@ -142,7 +142,8 @@ impl LlmProvider for GeminiClient {
             "model": format!("models/{}", self.embedding_model),
             "content": {
                 "parts": [{ "text": text }]
-            }
+            },
+            "output_dimensionality": 768
         });
 
         let response = self
@@ -155,7 +156,10 @@ impl LlmProvider for GeminiClient {
 
         if !response.status().is_success() {
             let error_text = response.text().await?;
-            return Err(anyhow::anyhow!("Gemini Embedding API error: {}", error_text));
+            return Err(anyhow::anyhow!(
+                "Gemini Embedding API error: {}",
+                error_text
+            ));
         }
 
         let resp_json: serde_json::Value = response.json().await?;
@@ -267,10 +271,7 @@ mod tests {
         });
 
         let mock = server
-            .mock(
-                "POST",
-                "/v1beta/models/text-embedding-004:embedContent",
-            )
+            .mock("POST", "/v1beta/models/text-embedding-004:embedContent")
             .match_header("x-goog-api-key", "test-key")
             .match_body(Matcher::PartialJson(json!({
                 "model": "models/text-embedding-004",
