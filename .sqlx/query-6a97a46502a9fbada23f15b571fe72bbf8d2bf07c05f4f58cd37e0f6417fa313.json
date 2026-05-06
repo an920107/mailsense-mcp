@@ -1,0 +1,64 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT \n                message_id, thread_id, in_reply_to, \"references\", subject, from_address, body_text, date\n            FROM email_documents\n            WHERE message_id = $1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "message_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "thread_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "in_reply_to",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "references",
+        "type_info": "TextArray"
+      },
+      {
+        "ordinal": 4,
+        "name": "subject",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "from_address",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "body_text",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "date",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "6a97a46502a9fbada23f15b571fe72bbf8d2bf07c05f4f58cd37e0f6417fa313"
+}

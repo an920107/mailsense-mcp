@@ -77,6 +77,9 @@ pub trait StorageProvider: Send + Sync {
     /// Mark an email as processed.
     async fn mark_email_processed(&self, message_id: &str) -> anyhow::Result<()>;
 
+    /// Get an email by its Message-ID.
+    async fn get_email_by_id(&self, message_id: &str) -> anyhow::Result<Option<EmailMessage>>;
+
     /// Store a processed email document with its embedding and threading info.
     async fn store_email_document(
         &self,
@@ -119,6 +122,17 @@ pub enum EmailIntent {
     FYI,
     Update,
     Spam,
+}
+
+impl EmailIntent {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            EmailIntent::ActionRequired => "ActionRequired",
+            EmailIntent::FYI => "FYI",
+            EmailIntent::Update => "Update",
+            EmailIntent::Spam => "Spam",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

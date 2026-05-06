@@ -71,6 +71,44 @@ pub struct ServerInfo {
     pub version: String,
 }
 
+// --- MCP Tools ---
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ListToolsResult {
+    pub tools: Vec<Tool>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Tool {
+    pub name: String,
+    pub description: String,
+    pub input_schema: serde_json::Value,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CallToolParams {
+    pub name: String,
+    pub arguments: serde_json::Value,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CallToolResult {
+    pub content: Vec<ToolContent>,
+    #[serde(default)]
+    pub is_error: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(tag = "type")]
+pub enum ToolContent {
+    #[serde(rename = "text")]
+    Text { text: String },
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

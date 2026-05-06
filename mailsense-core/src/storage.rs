@@ -82,6 +82,39 @@ impl StorageProvider for PgStorage {
         Ok(())
     }
 
+    async fn get_email_by_id(
+        &self,
+        message_id: &str,
+    ) -> anyhow::Result<Option<crate::domain::EmailMessage>> {
+        let row = sqlx::query!(
+            r#"
+            SELECT 
+                message_id, thread_id, in_reply_to, "references", subject, from_address, body_text, date
+            FROM email_documents
+            WHERE message_id = $1
+            "#,
+            message_id
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+
+        if let Some(r) = row {
+            Ok(Some(crate::domain::EmailMessage {
+                message_id: r.message_id,
+                thread_id: Some(r.thread_id),
+                in_reply_to: r.in_reply_to,
+                references: r.references,
+                subject: r.subject,
+                from: r.from_address,
+                body: r.body_text,
+                date: r.date.to_rfc3339(),
+                attachments: vec![], // Attachments are not stored in the documents table
+            }))
+        } else {
+            Ok(None)
+        }
+    }
+
     async fn enqueue_task(
         &self,
         task_type: &str,
