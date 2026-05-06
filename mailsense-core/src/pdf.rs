@@ -125,9 +125,10 @@ mod tests {
         // Testing with an unencrypted file but multiple passwords
         // and ensuring it still works (it will succeed on the first attempt
         // because load_mem_with_password succeeds for unencrypted docs).
-        let result = decrypt_pdf_with_timeout(&bytes, &["wrong".to_string(), "correct".to_string()])
-            .await
-            .unwrap();
+        let result =
+            decrypt_pdf_with_timeout(&bytes, &["wrong".to_string(), "correct".to_string()])
+                .await
+                .unwrap();
         assert!(result.is_some());
     }
 }

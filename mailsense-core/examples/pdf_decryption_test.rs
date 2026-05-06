@@ -24,7 +24,10 @@ async fn main() -> anyhow::Result<()> {
 
     // 安全地遮罩 ID 與生日 (Comment 3192264175, 3192264138)
     let masked_id = if personal.id_number.len() >= 4 {
-        format!("****{}", &personal.id_number[personal.id_number.len() - 4..])
+        format!(
+            "****{}",
+            &personal.id_number[personal.id_number.len() - 4..]
+        )
     } else {
         "****".to_string()
     };
