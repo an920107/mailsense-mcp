@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS email_documents (
     message_id TEXT NOT NULL UNIQUE,
     thread_id TEXT NOT NULL,
     in_reply_to TEXT,
-    references TEXT[] NOT NULL DEFAULT '{}',
+    "references" TEXT[] NOT NULL DEFAULT '{}',
     subject TEXT NOT NULL,
     from_address TEXT NOT NULL,
     body_text TEXT NOT NULL,
