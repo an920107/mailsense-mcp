@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                INSERT INTO email_attachments (\n                    id, message_id, filename, mime_type, data, \n                    is_encrypted, is_decrypted, decryption_error\n                )\n                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)\n                ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Bytea",
+        "Bool",
+        "Bool",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e059841142e3ecd49d2dd822e35d86da40245aeefe0fc30a97bf445a9fd6c8bf"
+}

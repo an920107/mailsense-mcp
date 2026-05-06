@@ -1,5 +1,6 @@
 use async_imap::Session;
 use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 use futures::StreamExt;
 use mail_parser::MimeHeaders;
 use mailsense_core::config::ImapConfig;
@@ -41,6 +42,89 @@ impl ImapClient {
         session.select("INBOX").await?;
         Ok(session)
     }
+
+    fn parse_message(&self, parsed: mail_parser::Message<'_>) -> EmailMessage {
+        let message_id = parsed
+            .message_id()
+            .map(|id| id.to_string())
+            .unwrap_or_else(|| {
+                // Generate deterministic surrogate key if Message-ID is missing
+                use std::collections::hash_map::DefaultHasher;
+                use std::hash::{Hash, Hasher};
+                let mut hasher = DefaultHasher::new();
+                parsed.subject().hash(&mut hasher);
+                // Hash individual addresses since mail_parser::Address doesn't implement Hash
+                if let Some(addresses) = parsed.from().and_then(|f| f.as_list()) {
+                    for addr in addresses {
+                        addr.address().hash(&mut hasher);
+                    }
+                }
+
+                parsed.date().map(|d| d.to_rfc3339()).hash(&mut hasher);
+                format!("surrogate-{}", hasher.finish())
+            });
+
+        let in_reply_to = match parsed.in_reply_to() {
+            mail_parser::HeaderValue::Text(t) => Some(t.to_string()),
+            _ => None,
+        };
+        let references = match parsed.references() {
+            mail_parser::HeaderValue::Text(t) => vec![t.to_string()],
+            mail_parser::HeaderValue::TextList(tl) => tl.iter().map(|s| s.to_string()).collect(),
+            _ => vec![],
+        };
+
+        let subject = parsed.subject().unwrap_or("No Subject").to_string();
+        let from = parsed
+            .from()
+            .and_then(|f| f.as_list())
+            .and_then(|l| l.first())
+            .map(|a| a.address().unwrap_or("Unknown"))
+            .unwrap_or("Unknown")
+            .to_string();
+        let body_text = parsed.body_text(0).as_deref().unwrap_or("").to_string();
+        let date = parsed
+            .date()
+            .map(|d| d.to_rfc3339())
+            .unwrap_or_else(|| "Unknown".to_string());
+
+        let mut attachments = Vec::new();
+        for part in parsed.attachments() {
+            let filename = part
+                .attachment_name()
+                .unwrap_or("unnamed_attachment")
+                .to_string();
+            let mime_type = part
+                .content_type()
+                .map(|ct| format!("{}/{}", ct.ctype(), ct.subtype().unwrap_or("*")))
+                .unwrap_or_else(|| "application/octet-stream".to_string());
+            let data = part.contents().to_vec();
+
+            attachments.push(mailsense_core::domain::Attachment {
+                id: None,
+                filename,
+                mime_type,
+                data,
+                is_encrypted: false,
+                is_decrypted: false,
+                decryption_error: None,
+            });
+        }
+
+        EmailMessage {
+            id: None,
+            message_id,
+            thread_id: None,
+            in_reply_to,
+            references,
+            subject,
+            from,
+            body: body_text,
+            date,
+            attachments,
+            analysis: None,
+        }
+    }
 }
 
 #[async_trait]
@@ -72,83 +156,43 @@ impl EmailProvider for ImapClient {
                 .body()
                 .and_then(|body| mail_parser::MessageParser::new().parse(body))
             {
-                let message_id =
-                    parsed
-                        .message_id()
-                        .map(|id| id.to_string())
-                        .unwrap_or_else(|| {
-                            // Generate deterministic surrogate key if Message-ID is missing
-                            use std::collections::hash_map::DefaultHasher;
-                            use std::hash::{Hash, Hasher};
-                            let mut hasher = DefaultHasher::new();
-                            parsed.subject().hash(&mut hasher);
-                            // Hash individual addresses since mail_parser::Address doesn't implement Hash
-                            if let Some(addresses) = parsed.from().and_then(|f| f.as_list()) {
-                                for addr in addresses {
-                                    addr.address().hash(&mut hasher);
-                                }
-                            }
+                result.push(self.parse_message(parsed));
+            }
+        }
 
-                            parsed.date().map(|d| d.to_rfc3339()).hash(&mut hasher);
-                            format!("surrogate-{}", hasher.finish())
-                        });
+        result.reverse();
+        Ok(result)
+    }
 
-                let in_reply_to = match parsed.in_reply_to() {
-                    mail_parser::HeaderValue::Text(t) => Some(t.to_string()),
-                    _ => None,
-                };
-                let references = match parsed.references() {
-                    mail_parser::HeaderValue::Text(t) => vec![t.to_string()],
-                    mail_parser::HeaderValue::TextList(tl) => {
-                        tl.iter().map(|s| s.to_string()).collect()
-                    }
-                    _ => vec![],
-                };
+    async fn fetch_since(&self, since: DateTime<Utc>) -> anyhow::Result<Vec<EmailMessage>> {
+        let mut session = self.connect().await?;
 
-                let subject = parsed.subject().unwrap_or("No Subject").to_string();
-                let from = parsed
-                    .from()
-                    .and_then(|f| f.as_list())
-                    .and_then(|l| l.first())
-                    .map(|a| a.address().unwrap_or("Unknown"))
-                    .unwrap_or("Unknown")
-                    .to_string();
-                let body_text = parsed.body_text(0).as_deref().unwrap_or("").to_string();
-                let date = parsed
-                    .date()
-                    .map(|d| d.to_rfc3339())
-                    .unwrap_or_else(|| "Unknown".to_string());
+        // IMAP SEARCH SINCE expects a date in "DD-Mon-YYYY" format (RFC 3501)
+        let imap_date = since.format("%d-%b-%Y").to_string();
+        let search_criteria = format!("SINCE {}", imap_date);
+        let search_results = session.search(search_criteria).await?;
 
-                let mut attachments = Vec::new();
-                for part in parsed.attachments() {
-                    let filename = part
-                        .attachment_name()
-                        .unwrap_or("unnamed_attachment")
-                        .to_string();
-                    let mime_type = part
-                        .content_type()
-                        .map(|ct| ct.ctype().to_string())
-                        .unwrap_or_else(|| "application/octet-stream".to_string());
-                    let data = part.contents().to_vec();
+        if search_results.is_empty() {
+            return Ok(vec![]);
+        }
 
-                    attachments.push(mailsense_core::domain::Attachment {
-                        filename,
-                        mime_type,
-                        data,
-                    });
-                }
+        // Fetch all messages found
+        let fetch_range = search_results
+            .iter()
+            .map(|&id| id.to_string())
+            .collect::<Vec<_>>()
+            .join(",");
 
-                result.push(EmailMessage {
-                    message_id,
-                    thread_id: None,
-                    in_reply_to,
-                    references,
-                    subject,
-                    from,
-                    body: body_text,
-                    date,
-                    attachments,
-                });
+        let mut messages_stream = session.fetch(fetch_range, "RFC822").await?;
+
+        let mut result = Vec::new();
+        while let Some(msg_result) = messages_stream.next().await {
+            let msg = msg_result?;
+            if let Some(parsed) = msg
+                .body()
+                .and_then(|body| mail_parser::MessageParser::new().parse(body))
+            {
+                result.push(self.parse_message(parsed));
             }
         }
 

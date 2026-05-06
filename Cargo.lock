@@ -1337,7 +1337,10 @@ name = "mailsense-bin"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "chrono",
  "dotenvy",
+ "futures",
+ "lopdf",
  "mailsense-core",
  "mailsense-imap",
  "mailsense-mcp",
@@ -1375,6 +1378,7 @@ dependencies = [
  "anyhow",
  "async-imap",
  "async-trait",
+ "chrono",
  "futures",
  "mail-parser",
  "mailsense-core",
@@ -1392,12 +1396,14 @@ name = "mailsense-mcp"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "base64",
  "mailsense-core",
  "serde",
  "serde_json",
  "thiserror 1.0.69",
  "tokio",
  "tracing",
+ "uuid",
 ]
 
 [[package]]

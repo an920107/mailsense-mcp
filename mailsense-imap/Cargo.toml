@@ -8,6 +8,7 @@ license.workspace = true
 anyhow = { workspace = true }
 async-imap = { workspace = true }
 async-trait = { workspace = true }
+chrono = { workspace = true }
 futures = { workspace = true }
 mail-parser = { workspace = true }
 mailsense-core = { workspace = true }

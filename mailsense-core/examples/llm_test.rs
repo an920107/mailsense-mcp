@@ -18,10 +18,18 @@ async fn main() -> anyhow::Result<()> {
     println!("Model: {}", model);
 
     // 2. 初始化 Gemini 客戶端
-    let client = GeminiClient::new(api_key, model, embedding_model, base_url);
+    let client = GeminiClient::new(
+        api_key,
+        model,
+        embedding_model,
+        base_url,
+        5 * 1024 * 1024,
+        3,
+    );
 
     // 3. 準備一封測試郵件
     let email = EmailMessage {
+        id: None,
         message_id: "test-id-123".to_string(),
         thread_id: None,
         in_reply_to: None,
@@ -38,8 +46,9 @@ async fn main() -> anyhow::Result<()> {
             DevOps Team
         "#
         .to_string(),
-        date: "2026-05-04".to_string(),
+        date: "2026-05-04T10:00:00Z".to_string(),
         attachments: vec![],
+        analysis: None,
     };
 
     println!("\n📧 Analyzing Email...");

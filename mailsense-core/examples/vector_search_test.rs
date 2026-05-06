@@ -16,13 +16,21 @@ async fn main() -> anyhow::Result<()> {
     let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL missing");
 
     // 2. 初始化組件
-    let client = GeminiClient::new(api_key, model, embedding_model, Some(base_url));
+    let client = GeminiClient::new(
+        api_key,
+        model,
+        embedding_model,
+        Some(base_url),
+        5 * 1024 * 1024,
+        3,
+    );
     let storage = PgStorage::connect(&database_url).await?;
 
     println!("🚀 Testing Vector Search & Threading Pipeline...");
 
     // 3. 準備模擬數據 (Thread: Project Alpha)
     let email1 = EmailMessage {
+        id: None,
         message_id: "example-msg-1-kickoff".to_string(),
         thread_id: None,
         in_reply_to: None,
@@ -32,9 +40,11 @@ async fn main() -> anyhow::Result<()> {
         body: "Let's start the new project focused on Rust and MCP integration.".to_string(),
         date: "2026-05-01T10:00:00Z".to_string(),
         attachments: vec![],
+        analysis: None,
     };
 
     let email2 = EmailMessage {
+        id: None,
         message_id: "example-msg-2-reply".to_string(),
         thread_id: None,
         in_reply_to: Some(email1.message_id.clone()),
@@ -45,6 +55,7 @@ async fn main() -> anyhow::Result<()> {
             .to_string(),
         date: "2026-05-01T11:00:00Z".to_string(),
         attachments: vec![Attachment {
+            id: None,
             filename: "architecture.png".to_string(),
             mime_type: "image/png".to_string(),
             // A valid 1x1 transparent PNG
@@ -53,7 +64,11 @@ async fn main() -> anyhow::Result<()> {
                 1, 8, 6, 0, 0, 0, 31, 21, 196, 137, 0, 0, 0, 11, 73, 68, 65, 84, 8, 215, 99, 96, 0,
                 2, 0, 0, 5, 0, 1, 226, 38, 5, 155, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130,
             ],
+            is_encrypted: false,
+            is_decrypted: false,
+            decryption_error: None,
         }],
+        analysis: None,
     };
 
     let mut emails = vec![email1];
@@ -84,13 +99,10 @@ async fn main() -> anyhow::Result<()> {
             .unwrap_or(email.message_id.clone());
 
         storage
-            .store_email_document(email, &thread_id, Some(embedding))
+            .store_email_document(email, &thread_id, Some(embedding), None)
             .await?;
 
-        // 標記為已處理
-        storage.mark_email_processed(&email.message_id).await?;
-
-        println!("✅ Stored & Marked.");
+        println!("✅ Stored.");
     }
 
     // 5. 測試混合搜索
@@ -106,7 +118,7 @@ async fn main() -> anyhow::Result<()> {
         println!("\n--- Query: '{}' ---", query);
         let query_embedding = client.generate_query_embedding(query).await?;
         let results = storage
-            .hybrid_search(query, Some(query_embedding), 5)
+            .hybrid_search(query, Some(query_embedding), None, 5)
             .await?;
 
         if results.is_empty() {

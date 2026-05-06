@@ -8,6 +8,8 @@ pub struct Config {
     pub imap: ImapConfig,
     pub gemini: Option<GeminiConfig>,
     pub personal: Option<PersonalConfig>,
+    pub ingestion_initial_days: u32,
+    pub ingestion_interval_minutes: u64,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -25,6 +27,8 @@ pub struct GeminiConfig {
     pub model: String,
     pub embedding_model: String,
     pub base_url: String,
+    pub max_attachment_size: usize,
+    pub max_multimodal_parts: usize,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -72,6 +76,14 @@ impl Config {
                     base_url: std::env::var("GEMINI_BASE_URL").unwrap_or_else(|_| {
                         "https://generativelanguage.googleapis.com".to_string()
                     }),
+                    max_attachment_size: std::env::var("GEMINI_MAX_ATTACHMENT_SIZE")
+                        .unwrap_or_else(|_| (5 * 1024 * 1024).to_string())
+                        .parse()
+                        .context("GEMINI_MAX_ATTACHMENT_SIZE must be a number")?,
+                    max_multimodal_parts: std::env::var("GEMINI_MAX_MULTIMODAL_PARTS")
+                        .unwrap_or_else(|_| 3.to_string())
+                        .parse()
+                        .context("GEMINI_MAX_MULTIMODAL_PARTS must be a number")?,
                 })
             })
             .transpose()?;
@@ -91,12 +103,24 @@ impl Config {
             })
         });
 
+        let ingestion_initial_days = std::env::var("INGESTION_INITIAL_DAYS")
+            .unwrap_or_else(|_| "1".to_string())
+            .parse()
+            .context("INGESTION_INITIAL_DAYS must be a number")?;
+
+        let ingestion_interval_minutes = std::env::var("INGESTION_INTERVAL_MINUTES")
+            .unwrap_or_else(|_| "15".to_string())
+            .parse()
+            .context("INGESTION_INTERVAL_MINUTES must be a number")?;
+
         Ok(Self {
             database_url,
             log_level,
             imap,
             gemini,
             personal,
+            ingestion_initial_days,
+            ingestion_interval_minutes,
         })
     }
 
@@ -155,6 +179,14 @@ impl Config {
                         base_url: map.get("GEMINI_BASE_URL").cloned().unwrap_or_else(|| {
                             "https://generativelanguage.googleapis.com".to_string()
                         }),
+                        max_attachment_size: map
+                            .get("GEMINI_MAX_ATTACHMENT_SIZE")
+                            .and_then(|v| v.parse().ok())
+                            .unwrap_or(5 * 1024 * 1024),
+                        max_multimodal_parts: map
+                            .get("GEMINI_MAX_MULTIMODAL_PARTS")
+                            .and_then(|v| v.parse().ok())
+                            .unwrap_or(3),
                     })
                 })
                 .transpose()?;
@@ -172,12 +204,24 @@ impl Config {
             })
         });
 
+        let ingestion_initial_days = map
+            .get("INGESTION_INITIAL_DAYS")
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(1);
+
+        let ingestion_interval_minutes = map
+            .get("INGESTION_INTERVAL_MINUTES")
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(15);
+
         Ok(Self {
             database_url,
             log_level,
             imap,
             gemini,
             personal,
+            ingestion_initial_days,
+            ingestion_interval_minutes,
         })
     }
 }
@@ -212,6 +256,8 @@ mod tests {
         );
         map.insert("USER_ID_NUMBER".to_string(), "A123456789".to_string());
         map.insert("USER_BIRTHDAY".to_string(), "19900101".to_string());
+        map.insert("INGESTION_INITIAL_DAYS".to_string(), "2".to_string());
+        map.insert("INGESTION_INTERVAL_MINUTES".to_string(), "30".to_string());
 
         let config = Config::from_map(map).expect("Failed to load config");
         assert_eq!(config.database_url, "postgres://test:test@localhost/test");
@@ -221,6 +267,8 @@ mod tests {
         assert_eq!(config.imap.username, "user");
         assert_eq!(config.imap.password, "pass");
         assert!(config.imap.tls_enabled);
+        assert_eq!(config.ingestion_initial_days, 2);
+        assert_eq!(config.ingestion_interval_minutes, 30);
 
         let gemini = config.gemini.expect("Gemini config should be present");
         assert_eq!(gemini.api_key, "gemini-key");

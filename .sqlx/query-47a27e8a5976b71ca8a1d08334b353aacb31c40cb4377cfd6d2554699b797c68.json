@@ -1,0 +1,52 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT id, filename, mime_type, is_encrypted, is_decrypted, decryption_error\n            FROM email_attachments\n            WHERE message_id = $1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "filename",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "mime_type",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "is_encrypted",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 4,
+        "name": "is_decrypted",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 5,
+        "name": "decryption_error",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "47a27e8a5976b71ca8a1d08334b353aacb31c40cb4377cfd6d2554699b797c68"
+}

@@ -5,13 +5,21 @@ use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Attachment {
+    pub id: Option<Uuid>,
     pub filename: String,
     pub mime_type: String,
     pub data: Vec<u8>,
+    #[serde(default)]
+    pub is_encrypted: bool,
+    #[serde(default)]
+    pub is_decrypted: bool,
+    #[serde(default)]
+    pub decryption_error: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EmailMessage {
+    pub id: Option<Uuid>,
     pub message_id: String,
     pub thread_id: Option<String>,
     pub in_reply_to: Option<String>,
@@ -21,6 +29,7 @@ pub struct EmailMessage {
     pub body: String,
     pub date: String,
     pub attachments: Vec<Attachment>,
+    pub analysis: Option<EmailAnalysis>,
 }
 
 impl EmailMessage {
@@ -34,48 +43,31 @@ impl EmailMessage {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub enum TaskStatus {
-    Pending,
-    InProgress,
-    Completed,
-    Failed,
-}
-
-impl TaskStatus {
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            TaskStatus::Pending => "Pending",
-            TaskStatus::InProgress => "InProgress",
-            TaskStatus::Completed => "Completed",
-            TaskStatus::Failed => "Failed",
-        }
-    }
-}
-
-impl std::fmt::Display for TaskStatus {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.as_str())
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Task {
-    pub id: Uuid,
-    pub task_type: String,
-    pub status: TaskStatus,
-    pub payload: serde_json::Value,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-}
-
 #[async_trait]
 pub trait StorageProvider: Send + Sync {
     /// Check if an email has already been processed by its Message-ID.
+    /// This now checks for existence in the email_documents table.
     async fn is_email_processed(&self, message_id: &str) -> anyhow::Result<bool>;
 
-    /// Mark an email as processed.
-    async fn mark_email_processed(&self, message_id: &str) -> anyhow::Result<()>;
+    /// Get an email by its Message-ID.
+    async fn get_email_by_id(&self, message_id: &str) -> anyhow::Result<Option<EmailMessage>>;
+
+    /// Get all attachments for a specific Message-ID.
+    /// Warning: This fetches full binary data for all attachments.
+    async fn get_attachments_by_message_id(
+        &self,
+        message_id: &str,
+    ) -> anyhow::Result<Vec<Attachment>>;
+
+    /// Get metadata (no binary data) for all attachments of a specific Message-ID.
+    async fn get_attachment_metadata_by_message_id(
+        &self,
+        message_id: &str,
+    ) -> anyhow::Result<Vec<Attachment>>;
+
+    /// Get a specific attachment by its unique internal ID.
+    async fn get_attachment_by_id(&self, attachment_id: Uuid)
+    -> anyhow::Result<Option<Attachment>>;
 
     /// Store a processed email document with its embedding and threading info.
     async fn store_email_document(
@@ -83,6 +75,7 @@ pub trait StorageProvider: Send + Sync {
         email: &EmailMessage,
         thread_id: &str,
         embedding: Option<Vec<f32>>,
+        analysis: Option<EmailAnalysis>,
     ) -> anyhow::Result<()>;
 
     /// Perform a hybrid search using vector similarity and keyword matching.
@@ -90,27 +83,18 @@ pub trait StorageProvider: Send + Sync {
         &self,
         query_text: &str,
         query_embedding: Option<Vec<f32>>,
+        intent: Option<EmailIntent>,
         limit: u32,
     ) -> anyhow::Result<Vec<EmailMessage>>;
-
-    /// Enqueue a new background task.
-    async fn enqueue_task(
-        &self,
-        task_type: &str,
-        payload: serde_json::Value,
-    ) -> anyhow::Result<Task>;
-
-    /// Get a pending task and mark it as InProgress.
-    async fn pick_next_task(&self) -> anyhow::Result<Option<Task>>;
-
-    /// Update the status of a task.
-    async fn update_task_status(&self, id: Uuid, status: TaskStatus) -> anyhow::Result<()>;
 }
 
 #[async_trait]
 pub trait EmailProvider: Send + Sync {
     /// Fetch the latest `limit` emails from the provider.
     async fn fetch_recent(&self, limit: u32) -> anyhow::Result<Vec<EmailMessage>>;
+
+    /// Fetch emails received since the given timestamp.
+    async fn fetch_since(&self, since: DateTime<Utc>) -> anyhow::Result<Vec<EmailMessage>>;
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -119,6 +103,17 @@ pub enum EmailIntent {
     FYI,
     Update,
     Spam,
+}
+
+impl EmailIntent {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            EmailIntent::ActionRequired => "ActionRequired",
+            EmailIntent::FYI => "FYI",
+            EmailIntent::Update => "Update",
+            EmailIntent::Spam => "Spam",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

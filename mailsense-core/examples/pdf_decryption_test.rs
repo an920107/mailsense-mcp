@@ -47,10 +47,13 @@ async fn main() -> anyhow::Result<()> {
         gemini_cfg.model.clone(),
         gemini_cfg.embedding_model.clone(),
         Some(gemini_cfg.base_url.clone()),
+        5 * 1024 * 1024,
+        3,
     );
 
     // 3. 準備模擬郵件 (您可以根據實際 PDF 的密碼規則修改這段 Body)
     let email = EmailMessage {
+        id: None,
         message_id: "test-id-pdf-123".to_string(),
         thread_id: None,
         in_reply_to: None,
@@ -65,6 +68,7 @@ async fn main() -> anyhow::Result<()> {
         .to_string(),
         date: "2026-05-04T10:00:00Z".to_string(),
         attachments: vec![],
+        analysis: None,
     };
 
     println!("\n📧 Phase 1: LLM Recipe Deduction...");
