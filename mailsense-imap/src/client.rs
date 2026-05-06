@@ -72,10 +72,7 @@ impl EmailProvider for ImapClient {
                 .body()
                 .and_then(|body| mail_parser::MessageParser::new().parse(body))
             {
-                let message_id = parsed
-                    .message_id()
-                    .unwrap_or_else(|| "Unknown-ID")
-                    .to_string();
+                let message_id = parsed.message_id().unwrap_or("Unknown-ID").to_string();
                 let in_reply_to = match parsed.in_reply_to() {
                     mail_parser::HeaderValue::Text(t) => Some(t.to_string()),
                     _ => None,
@@ -108,7 +105,10 @@ impl EmailProvider for ImapClient {
                         .attachment_name()
                         .unwrap_or("unnamed_attachment")
                         .to_string();
-                    let mime_type = part.content_type().map(|ct| ct.ctype().to_string()).unwrap_or_else(|| "application/octet-stream".to_string());
+                    let mime_type = part
+                        .content_type()
+                        .map(|ct| ct.ctype().to_string())
+                        .unwrap_or_else(|| "application/octet-stream".to_string());
                     let data = part.contents().to_vec();
 
                     attachments.push(mailsense_core::domain::Attachment {

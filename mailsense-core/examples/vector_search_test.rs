@@ -2,7 +2,6 @@ use mailsense_core::config::Config;
 use mailsense_core::domain::{Attachment, EmailMessage, LlmProvider, StorageProvider};
 use mailsense_core::llm::GeminiClient;
 use mailsense_core::storage::PgStorage;
-use uuid::Uuid;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -44,7 +43,8 @@ async fn main() -> anyhow::Result<()> {
         references: vec![email1.message_id.clone()],
         subject: "Re: Project Alpha Kickoff".to_string(),
         from: "dev@example.com".to_string(),
-        body: "I will setup the basic workspace using Cargo Workspaces. See the design attached.".to_string(),
+        body: "I will setup the basic workspace using Cargo Workspaces. See the design attached."
+            .to_string(),
         date: "2026-05-01T11:00:00Z".to_string(),
         attachments: vec![Attachment {
             filename: "architecture.png".to_string(),
@@ -65,8 +65,12 @@ async fn main() -> anyhow::Result<()> {
     // 4. 生成 Embedding 並儲存
     println!("\n📥 Phase 1: Embedding & Storage...");
     for email in &emails {
-        print!("Processing: {} (Attachments: {})... ", email.subject, email.attachments.len());
-        
+        print!(
+            "Processing: {} (Attachments: {})... ",
+            email.subject,
+            email.attachments.len()
+        );
+
         // 🚀 Idempotency Guard: 檢查是否已經處理過，避免重複呼叫昂貴的 LLM (Comment 3192264175)
         if storage.is_email_processed(&email.message_id).await? {
             println!("⏩ Skipped (Already processed).");
@@ -74,15 +78,20 @@ async fn main() -> anyhow::Result<()> {
         }
 
         let embedding = client.generate_embedding(email).await?;
-        
+
         // 簡單的 Thread ID 邏輯：根郵件的 ID
-        let thread_id = email.in_reply_to.clone().unwrap_or(email.message_id.clone());
-        
-        storage.store_email_document(email, &thread_id, Some(embedding)).await?;
-        
+        let thread_id = email
+            .in_reply_to
+            .clone()
+            .unwrap_or(email.message_id.clone());
+
+        storage
+            .store_email_document(email, &thread_id, Some(embedding))
+            .await?;
+
         // 標記為已處理
         storage.mark_email_processed(&email.message_id).await?;
-        
+
         println!("✅ Stored & Marked.");
     }
 

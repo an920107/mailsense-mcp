@@ -24,7 +24,7 @@ pub struct EmailMessage {
 }
 
 impl EmailMessage {
-    /// Generates a structured string suitable for embedding, 
+    /// Generates a structured string suitable for embedding,
     /// following the Gemini 2 recommendation: "title: {title} | text: {content}"
     pub fn to_embedding_text(&self) -> String {
         format!(
