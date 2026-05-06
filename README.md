@@ -23,15 +23,13 @@ without redundant processing.
 ## ✨ Core Capabilities
 
 - **Autonomous Categorization & Summarization**: Automatically labels incoming
-  emails (Important, Newsletter, Spam) and generates concise summaries.
-- **Deadline Extraction & Task Generation**: Parses email bodies to identify
-  temporal commitments and deadlines, exposing them for external scheduling
-  tools.
-- **Thread-Aware Hybrid Search**: Aggregates email threads and stores them using
-  Dense Vectors + BM25 (Sparse Vectors) for highly accurate semantic retrieval.
-- **Dynamic Attachment Decryption**: Employs a Two-Stage LLM reasoning pipeline
-  to deduce password rules from the email body and brute-force encrypted PDFs
-  (e.g., electronic tickets, bank statements).
+  emails (Important, Newsletter, Spam) and generates concise summaries upon arrival.
+- **Deadline Extraction**: Parses email bodies to identify temporal commitments.
+- **Hybrid Search**: Leverages PostgreSQL `pgvector` and Full-Text Search for 
+  highly accurate semantic and keyword retrieval.
+- **Dynamic Attachment Decryption**: Employs an LLM reasoning pipeline
+  to deduce password rules from the email body and automatically decrypts 
+  PDFs (e.g., electronic tickets, bank statements) on the fly using local config.
 - **Idempotent Operations**: Built-in local state management ensures emails are
   never processed twice, even across system restarts.
 
@@ -47,9 +45,8 @@ design.
 - **Protocol**: Model Context Protocol (MCP) via `stdio` or `SSE`.
 - **IMAP & Parsing**: `async-imap`, `mail-parser`
 - **Database / State**: PostgreSQL (Sole Database)
-- **Vector Search**: Qdrant (for semantic search)
-- **LLM Integration**: Generic provider interface supporting OpenAI, Anthropic,
-  or Local LLMs via Ollama (for strict privacy).
+- **Vector Search**: PostgreSQL with `pgvector` (HNSW indices)
+- **LLM Integration**: Google Gemini 2 API (supports text, images, and PDF inputs).
 
 ### Workspace Structure (Sub-crates)
 
@@ -69,7 +66,7 @@ Workspace:
 
 If you are an AI assistant (like Gemini CLI) contributing to this repository,
 you **MUST** read and adhere to the guidelines specified in
-[`AGENT.md`](./AGENT.md) before writing any code.
+[`GEMINI.md`](./GEMINI.md) before writing any code.
 
 **Key rules include:**
 
