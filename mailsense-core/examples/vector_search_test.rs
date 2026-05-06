@@ -66,13 +66,24 @@ async fn main() -> anyhow::Result<()> {
     println!("\n📥 Phase 1: Embedding & Storage...");
     for email in &emails {
         print!("Processing: {} (Attachments: {})... ", email.subject, email.attachments.len());
+        
+        // 🚀 Idempotency Guard: 檢查是否已經處理過，避免重複呼叫昂貴的 LLM (Comment 3192264175)
+        if storage.is_email_processed(&email.message_id).await? {
+            println!("⏩ Skipped (Already processed).");
+            continue;
+        }
+
         let embedding = client.generate_embedding(email).await?;
         
         // 簡單的 Thread ID 邏輯：根郵件的 ID
         let thread_id = email.in_reply_to.clone().unwrap_or(email.message_id.clone());
         
         storage.store_email_document(email, &thread_id, Some(embedding)).await?;
-        println!("✅ Stored.");
+        
+        // 標記為已處理
+        storage.mark_email_processed(&email.message_id).await?;
+        
+        println!("✅ Stored & Marked.");
     }
 
     // 5. 測試混合搜索
