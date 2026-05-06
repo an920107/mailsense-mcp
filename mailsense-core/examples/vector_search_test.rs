@@ -49,7 +49,12 @@ async fn main() -> anyhow::Result<()> {
         attachments: vec![Attachment {
             filename: "architecture.png".to_string(),
             mime_type: "image/png".to_string(),
-            data: vec![137, 80, 78, 71, 13, 10, 26, 10], // Mock PNG header
+            // A valid 1x1 transparent PNG
+            data: vec![
+                137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0,
+                1, 8, 6, 0, 0, 0, 31, 21, 196, 137, 0, 0, 0, 11, 73, 68, 65, 84, 8, 215, 99, 96, 0,
+                2, 0, 0, 5, 0, 1, 226, 38, 5, 155, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130,
+            ],
         }],
     };
 
