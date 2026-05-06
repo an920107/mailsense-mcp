@@ -42,14 +42,31 @@ principles and workflows during all interactions and code generation.
 
 - **Workspace Structure**: Utilize Cargo Workspaces to decouple the system into
   logical sub-crates (e.g., `core`, `imap-client`, `mcp-server`).
+- **Infrastructure Organization**: All development-specific infrastructure files
+  (Dockerfiles, Podman YAMLs, dev Makefiles) MUST be placed in the `infra/`
+  directory. Keep the project root clean for application-level concerns.
 - **Dependency Synchronization**: Always use `[workspace.dependencies]` in the
   root `Cargo.toml` to manage and synchronize crate versions across all
   sub-modules. Keep the dependency tree lean and avoid unnecessary bloat.
 - **Environment Awareness**: Assume the development and deployment environment
   is Unix-like. Ensure tools and build scripts are compatible and optimized for
-  this environment.
+  this environment. For containerized services, always restrict ports to
+  `127.0.0.1` unless public access is explicitly required.
 
-## 4. Documentation & Memory
+## 4. Engineering Best Practices (Special Mandates)
+
+- **Idempotency Guards**: ALWAYS implement idempotency checks before invoking
+  expensive LLM operations (e.g., embeddings, complex analysis). Use local
+  state (Postgres) to track and skip already-processed entities.
+- **Embedding Formatting**: For `gemini-embedding-2`, strictly follow the
+  Task-Specific formatting rules:
+    - **Documents**: `title: {subject} | text: {content}`
+    - **Queries**: `task: search result | query: {query}`
+- **Deterministic Testing**: Example scripts and manual test cases MUST use
+  deterministic data (e.g., fixed IDs) to allow reliable verification of
+  idempotency and state-dependent logic.
+
+## 5. Documentation & Memory
 
 - **Sync Documentation**: Whenever the code logic, architecture, or API changes,
   immediately update `README.md` and any relevant inline documentation or design
