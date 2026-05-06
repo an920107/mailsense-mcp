@@ -13,7 +13,7 @@ help:
 
 db-up:
 	@echo "🚀 Building custom Postgres image with pgvector..."
-	podman build -t $(IMAGE_NAME) .
+	podman build -t $(IMAGE_NAME) -f postgres.Dockerfile .
 	@echo "📦 Starting database pod..."
 	podman kube play --replace $(POD_FILE)
 
