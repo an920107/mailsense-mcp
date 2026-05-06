@@ -1,3 +1,4 @@
+use chrono::{DateTime, Utc};
 use mailsense_core::config::Config;
 use mailsense_core::domain::{EmailProvider, LlmProvider, StorageProvider};
 use mailsense_core::llm::GeminiClient;
@@ -42,21 +43,50 @@ async fn main() -> anyhow::Result<()> {
 
     tokio::spawn(async move {
         tracing::info!("Background ingestion worker started.");
+        let mut is_first_run = true;
+        let initial_days = config.ingestion_initial_days;
+        let interval_mins = config.ingestion_interval_minutes;
+
         loop {
-            tracing::info!("Starting scheduled ingestion...");
-            match run_ingestion(
-                worker_email.as_ref(),
-                worker_llm.as_ref(),
-                worker_storage.as_ref(),
-            )
-            .await
-            {
-                Ok(count) => tracing::info!("Ingestion complete. Processed {} new emails.", count),
-                Err(e) => tracing::error!("Ingestion worker error: {}", e),
+            if is_first_run {
+                tracing::info!("Starting initial ingestion (last {} days)...", initial_days);
+                let since = Utc::now() - Duration::from_secs(initial_days as u64 * 24 * 3600);
+                match run_ingestion_since(
+                    worker_email.as_ref(),
+                    worker_llm.as_ref(),
+                    worker_storage.as_ref(),
+                    since,
+                )
+                .await
+                {
+                    Ok(count) => {
+                        tracing::info!("Initial ingestion complete. Processed {} emails.", count);
+                        is_first_run = false;
+                    }
+                    Err(e) => tracing::error!("Initial ingestion error: {}", e),
+                }
+            } else {
+                tracing::info!("Starting scheduled ingestion...");
+                match run_ingestion_recent(
+                    worker_email.as_ref(),
+                    worker_llm.as_ref(),
+                    worker_storage.as_ref(),
+                    50,
+                )
+                .await
+                {
+                    Ok(count) => {
+                        tracing::info!(
+                            "Scheduled ingestion complete. Processed {} new emails.",
+                            count
+                        )
+                    }
+                    Err(e) => tracing::error!("Ingestion worker error: {}", e),
+                }
             }
 
-            tracing::info!("Next ingestion in 15 minutes.");
-            tokio::time::sleep(Duration::from_secs(15 * 60)).await;
+            tracing::info!("Next ingestion in {} minutes.", interval_mins);
+            tokio::time::sleep(Duration::from_secs(interval_mins * 60)).await;
         }
     });
 
@@ -67,13 +97,31 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn run_ingestion(
+async fn run_ingestion_since(
     email_provider: &dyn EmailProvider,
     llm: &dyn LlmProvider,
     storage: &dyn StorageProvider,
+    since: DateTime<Utc>,
 ) -> anyhow::Result<usize> {
-    // Fetch latest 50 emails
-    let emails = email_provider.fetch_recent(50).await?;
+    let emails = email_provider.fetch_since(since).await?;
+    process_emails(emails, llm, storage).await
+}
+
+async fn run_ingestion_recent(
+    email_provider: &dyn EmailProvider,
+    llm: &dyn LlmProvider,
+    storage: &dyn StorageProvider,
+    limit: u32,
+) -> anyhow::Result<usize> {
+    let emails = email_provider.fetch_recent(limit).await?;
+    process_emails(emails, llm, storage).await
+}
+
+async fn process_emails(
+    emails: Vec<mailsense_core::domain::EmailMessage>,
+    llm: &dyn LlmProvider,
+    storage: &dyn StorageProvider,
+) -> anyhow::Result<usize> {
     let mut processed_count = 0;
 
     for email in emails {
@@ -84,7 +132,6 @@ async fn run_ingestion(
             let embedding = llm.generate_embedding(&email).await?;
 
             // 2. Store document (using surrogate logic for threading if needed)
-            // For now, we use message_id as thread_id if not present to simplify
             let thread_id = email
                 .thread_id
                 .as_deref()

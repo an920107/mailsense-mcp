@@ -1337,6 +1337,7 @@ name = "mailsense-bin"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "chrono",
  "dotenvy",
  "mailsense-core",
  "mailsense-imap",
@@ -1375,6 +1376,7 @@ dependencies = [
  "anyhow",
  "async-imap",
  "async-trait",
+ "chrono",
  "futures",
  "mail-parser",
  "mailsense-core",

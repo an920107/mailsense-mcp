@@ -114,6 +114,9 @@ pub trait StorageProvider: Send + Sync {
 pub trait EmailProvider: Send + Sync {
     /// Fetch the latest `limit` emails from the provider.
     async fn fetch_recent(&self, limit: u32) -> anyhow::Result<Vec<EmailMessage>>;
+
+    /// Fetch emails received since the given timestamp.
+    async fn fetch_since(&self, since: DateTime<Utc>) -> anyhow::Result<Vec<EmailMessage>>;
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
