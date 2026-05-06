@@ -197,15 +197,14 @@ impl StorageProvider for PgStorage {
             .map(|dt| dt.with_timezone(&Utc))
             .context("Invalid RFC3339 date format in email.date")?;
 
-        let (summary, intent, deadlines, password_recipes) = if let Some(a) = analysis {
+        let (summary, intent, deadlines) = if let Some(a) = analysis {
             (
                 Some(a.summary),
                 Some(a.intent.as_str().to_string()),
                 Some(a.extracted_deadlines),
-                Some(serde_json::to_value(a.password_recipes)?),
             )
         } else {
-            (None, None, None, None)
+            (None, None, None)
         };
 
         let mut tx = self.pool.begin().await?;
@@ -215,9 +214,9 @@ impl StorageProvider for PgStorage {
             INSERT INTO email_documents (
                 id, message_id, thread_id, in_reply_to, "references", 
                 subject, from_address, body_text, date, embedding,
-                summary, intent, deadlines, password_recipes
+                summary, intent, deadlines
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
             ON CONFLICT (message_id) DO UPDATE SET
                 thread_id = EXCLUDED.thread_id,
                 in_reply_to = EXCLUDED.in_reply_to,
@@ -229,8 +228,7 @@ impl StorageProvider for PgStorage {
                 embedding = EXCLUDED.embedding,
                 summary = EXCLUDED.summary,
                 intent = EXCLUDED.intent,
-                deadlines = EXCLUDED.deadlines,
-                password_recipes = EXCLUDED.password_recipes
+                deadlines = EXCLUDED.deadlines
             "#,
         )
         .bind(Uuid::new_v4())
@@ -246,7 +244,6 @@ impl StorageProvider for PgStorage {
         .bind(summary)
         .bind(intent)
         .bind(deadlines)
-        .bind(password_recipes)
         .execute(&mut *tx)
         .await?;
 
@@ -300,7 +297,7 @@ impl StorageProvider for PgStorage {
             r#"
             SELECT 
                 message_id, thread_id, in_reply_to, "references", subject, from_address, body_text, date,
-                summary, intent, deadlines, password_recipes
+                summary, intent, deadlines
             FROM email_documents
             WHERE 
                 (search_vector @@ websearch_to_tsquery('english', $1)
@@ -344,10 +341,7 @@ impl StorageProvider for PgStorage {
                     tags: vec![], // Tags are not stored separately yet
                     summary,
                     extracted_deadlines: row.try_get("deadlines").unwrap_or_default(),
-                    password_recipes: row
-                        .try_get::<serde_json::Value, _>("password_recipes")
-                        .ok()
-                        .and_then(|v| serde_json::from_value(v).ok()),
+                    password_recipes: None, // No longer stored
                 })
             } else {
                 None

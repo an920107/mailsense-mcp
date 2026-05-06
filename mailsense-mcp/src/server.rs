@@ -195,12 +195,6 @@ impl McpServer {
                                 analysis.extracted_deadlines.join(", ")
                             ));
                         }
-                        if let Some(recipes) = &analysis.password_recipes {
-                            analysis_text.push_str(&format!(
-                                "  [Password Recipes Found]: {}\n",
-                                recipes.len()
-                            ));
-                        }
                     }
 
                     text.push_str(&format!(
