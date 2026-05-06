@@ -71,7 +71,17 @@ impl EmailProvider for ImapClient {
                 .body()
                 .and_then(|body| mail_parser::MessageParser::new().parse(body))
             {
-                let message_id = parsed.message_id().unwrap_or("Unknown-ID").to_string();
+                let message_id = parsed.message_id().map(|id| id.to_string()).unwrap_or_else(|| {
+                    // Generate deterministic surrogate key if Message-ID is missing
+                    use std::collections::hash_map::DefaultHasher;
+                    use std::hash::{Hash, Hasher};
+                    let mut hasher = DefaultHasher::new();
+                    parsed.subject().hash(&mut hasher);
+                    parsed.from().hash(&mut hasher);
+                    parsed.date().map(|d| d.to_rfc3339()).hash(&mut hasher);
+                    format!("surrogate-{}", hasher.finish())
+                });
+
                 let in_reply_to = match parsed.in_reply_to() {
                     mail_parser::HeaderValue::Text(t) => Some(t.to_string()),
                     _ => None,
