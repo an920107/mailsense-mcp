@@ -1,6 +1,7 @@
 use async_imap::Session;
 use async_trait::async_trait;
 use futures::StreamExt;
+use mail_parser::MimeHeaders;
 use mailsense_core::config::ImapConfig;
 use mailsense_core::domain::{EmailMessage, EmailProvider};
 use native_tls::TlsConnector;
@@ -71,16 +72,26 @@ impl EmailProvider for ImapClient {
                 .body()
                 .and_then(|body| mail_parser::MessageParser::new().parse(body))
             {
-                let message_id = parsed.message_id().map(|id| id.to_string()).unwrap_or_else(|| {
-                    // Generate deterministic surrogate key if Message-ID is missing
-                    use std::collections::hash_map::DefaultHasher;
-                    use std::hash::{Hash, Hasher};
-                    let mut hasher = DefaultHasher::new();
-                    parsed.subject().hash(&mut hasher);
-                    parsed.from().hash(&mut hasher);
-                    parsed.date().map(|d| d.to_rfc3339()).hash(&mut hasher);
-                    format!("surrogate-{}", hasher.finish())
-                });
+                let message_id =
+                    parsed
+                        .message_id()
+                        .map(|id| id.to_string())
+                        .unwrap_or_else(|| {
+                            // Generate deterministic surrogate key if Message-ID is missing
+                            use std::collections::hash_map::DefaultHasher;
+                            use std::hash::{Hash, Hasher};
+                            let mut hasher = DefaultHasher::new();
+                            parsed.subject().hash(&mut hasher);
+                            // Hash individual addresses since mail_parser::Address doesn't implement Hash
+                            if let Some(addresses) = parsed.from().and_then(|f| f.as_list()) {
+                                for addr in addresses {
+                                    addr.address().hash(&mut hasher);
+                                }
+                            }
+
+                            parsed.date().map(|d| d.to_rfc3339()).hash(&mut hasher);
+                            format!("surrogate-{}", hasher.finish())
+                        });
 
                 let in_reply_to = match parsed.in_reply_to() {
                     mail_parser::HeaderValue::Text(t) => Some(t.to_string()),

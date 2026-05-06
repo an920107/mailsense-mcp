@@ -1,4 +1,5 @@
 use crate::domain::{StorageProvider, Task, TaskStatus};
+use anyhow::Context;
 use async_trait::async_trait;
 use chrono::Utc;
 use sqlx::PgPool;
@@ -373,7 +374,10 @@ mod tests {
             .unwrap();
 
         // Test Hybrid Search (FTS part)
-        let results = storage.hybrid_search("async traits", None, 5).await.unwrap();
+        let results = storage
+            .hybrid_search("async traits", None, 5)
+            .await
+            .unwrap();
         assert!(!results.is_empty());
         assert_eq!(results[0].subject, "Meeting about Rust");
 

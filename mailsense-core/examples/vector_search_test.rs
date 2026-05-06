@@ -1,4 +1,3 @@
-use mailsense_core::config::Config;
 use mailsense_core::domain::{Attachment, EmailMessage, LlmProvider, StorageProvider};
 use mailsense_core::llm::GeminiClient;
 use mailsense_core::storage::PgStorage;
