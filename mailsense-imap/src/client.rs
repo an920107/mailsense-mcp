@@ -71,6 +71,22 @@ impl EmailProvider for ImapClient {
                 .body()
                 .and_then(|body| mail_parser::MessageParser::new().parse(body))
             {
+                let message_id = parsed
+                    .message_id()
+                    .unwrap_or_else(|| "Unknown-ID")
+                    .to_string();
+                let in_reply_to = match parsed.in_reply_to() {
+                    mail_parser::HeaderValue::Text(t) => Some(t.to_string()),
+                    _ => None,
+                };
+                let references = match parsed.references() {
+                    mail_parser::HeaderValue::Text(t) => vec![t.to_string()],
+                    mail_parser::HeaderValue::TextList(tl) => {
+                        tl.iter().map(|s| s.to_string()).collect()
+                    }
+                    _ => vec![],
+                };
+
                 let subject = parsed.subject().unwrap_or("No Subject").to_string();
                 let from = parsed
                     .from()
@@ -86,6 +102,9 @@ impl EmailProvider for ImapClient {
                     .unwrap_or_else(|| "Unknown".to_string());
 
                 result.push(EmailMessage {
+                    message_id,
+                    in_reply_to,
+                    references,
                     subject,
                     from,
                     body: body_text,
