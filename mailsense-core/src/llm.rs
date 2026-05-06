@@ -53,18 +53,36 @@ impl LlmProvider for GeminiClient {
                     "items": {
                         "type": "ARRAY",
                         "items": {
-                            "type": "OBJECT",
-                            "properties": {
-                                "type": { "type": "STRING", "enum": ["ID", "Bday", "Literal"] },
-                                "operation": { "type": "STRING", "enum": ["Full", "First", "Last"] },
-                                "length": {
-                                    "type": "INTEGER",
-                                    "description": "Required for First/Last operations. The number of characters to extract."
+                            "anyOf": [
+                                {
+                                    "type": "OBJECT",
+                                    "properties": {
+                                        "type": { "type": "STRING", "enum": ["ID"] },
+                                        "operation": { "type": "STRING", "enum": ["Full", "First", "Last"] },
+                                        "length": {
+                                            "type": "INTEGER",
+                                            "description": "The number of characters to extract. Mandatory for First/Last operations."
+                                        }
+                                    },
+                                    "required": ["type", "operation", "length"]
                                 },
-                                "format": { "type": "STRING", "enum": ["YYYYMMDD", "MMDD", "YYMMDD", "YYMM", "MINGUO"] },
-                                "value": { "type": "STRING" }
-                            },
-                            "required": ["type"]
+                                {
+                                    "type": "OBJECT",
+                                    "properties": {
+                                        "type": { "type": "STRING", "enum": ["Bday"] },
+                                        "format": { "type": "STRING", "enum": ["YYYYMMDD", "MMDD", "YYMMDD", "YYMM", "MINGUO"] }
+                                    },
+                                    "required": ["type", "format"]
+                                },
+                                {
+                                    "type": "OBJECT",
+                                    "properties": {
+                                        "type": { "type": "STRING", "enum": ["Literal"] },
+                                        "value": { "type": "STRING" }
+                                    },
+                                    "required": ["type", "value"]
+                                }
+                            ]
                         }
                     }
                 }
