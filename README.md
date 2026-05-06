@@ -25,10 +25,10 @@ without redundant processing.
 - **Autonomous Categorization & Summarization**: Automatically labels incoming
   emails (Important, Newsletter, Spam) and generates concise summaries upon arrival.
 - **Deadline Extraction**: Parses email bodies to identify temporal commitments.
-- **Hybrid Search**: Leverages PostgreSQL `pgvector` and Full-Text Search for 
+- **Hybrid Search**: Leverages PostgreSQL `pgvector` and Full-Text Search for
   highly accurate semantic and keyword retrieval.
 - **Dynamic Attachment Decryption**: Employs an LLM reasoning pipeline
-  to deduce password rules from the email body and automatically decrypts 
+  to deduce password rules from the email body and automatically decrypts
   PDFs (e.g., electronic tickets, bank statements) on the fly using local config.
 - **Idempotent Operations**: Built-in local state management ensures emails are
   never processed twice, even across system restarts.
