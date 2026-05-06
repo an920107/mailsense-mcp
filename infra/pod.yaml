@@ -5,7 +5,7 @@ metadata:
 spec:
   containers:
     - name: postgres
-      image: localhost/mailsense-postgres:17
+      image: docker.io/pgvector/pgvector:pg18
       env:
         - name: POSTGRES_HOST_AUTH_METHOD
           value: trust
@@ -16,15 +16,9 @@ spec:
           hostPort: 5432
           hostIP: 127.0.0.1
       volumeMounts:
-        - name: init-scripts
-          mountPath: /docker-entrypoint-initdb.d
         - name: postgres-data
           mountPath: /var/lib/postgresql/data
   volumes:
-    - name: init-scripts
-      hostPath:
-        path: ./scripts
-        type: Directory
     - name: postgres-data
       hostPath:
         path: ./postgres-data
