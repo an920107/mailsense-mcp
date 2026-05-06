@@ -43,7 +43,8 @@ impl StorageProvider for PgStorage {
         let row = sqlx::query!(
             r#"
             SELECT 
-                message_id, thread_id, in_reply_to, "references", subject, from_address, body_text, date
+                id, message_id, thread_id, in_reply_to, "references", subject, from_address, body_text, date,
+                summary, intent, deadlines
             FROM email_documents
             WHERE message_id = $1
             "#,
@@ -53,7 +54,27 @@ impl StorageProvider for PgStorage {
         .await?;
 
         if let Some(r) = row {
+            let analysis = if let (Some(summary), Some(intent_str)) = (r.summary, r.intent) {
+                let intent = match intent_str.as_str() {
+                    "ActionRequired" => crate::domain::EmailIntent::ActionRequired,
+                    "FYI" => crate::domain::EmailIntent::FYI,
+                    "Update" => crate::domain::EmailIntent::Update,
+                    _ => crate::domain::EmailIntent::Spam,
+                };
+
+                Some(crate::domain::EmailAnalysis {
+                    intent,
+                    tags: vec![],
+                    summary,
+                    extracted_deadlines: r.deadlines.unwrap_or_default(),
+                    password_recipes: None,
+                })
+            } else {
+                None
+            };
+
             Ok(Some(crate::domain::EmailMessage {
+                id: Some(r.id),
                 message_id: r.message_id,
                 thread_id: Some(r.thread_id),
                 in_reply_to: r.in_reply_to,
@@ -62,8 +83,8 @@ impl StorageProvider for PgStorage {
                 from: r.from_address,
                 body: r.body_text,
                 date: r.date.to_rfc3339(),
-                attachments: vec![], // Attachments are not stored in the documents table
-                analysis: None,
+                attachments: vec![],
+                analysis,
             }))
         } else {
             Ok(None)
@@ -213,7 +234,7 @@ impl StorageProvider for PgStorage {
         let rows = sqlx::query(
             r#"
             SELECT 
-                message_id, thread_id, in_reply_to, "references", subject, from_address, body_text, date,
+                id, message_id, thread_id, in_reply_to, "references", subject, from_address, body_text, date,
                 summary, intent, deadlines
             FROM email_documents
             WHERE 
@@ -265,6 +286,7 @@ impl StorageProvider for PgStorage {
             };
 
             messages.push(crate::domain::EmailMessage {
+                id: Some(row.get("id")),
                 message_id: row.get("message_id"),
                 thread_id: Some(row.get("thread_id")),
                 in_reply_to: row.get("in_reply_to"),
@@ -312,6 +334,7 @@ mod tests {
 
         // Store a dummy email
         let email = crate::domain::EmailMessage {
+            id: None,
             message_id: message_id.clone(),
             thread_id: None,
             in_reply_to: None,
@@ -351,7 +374,8 @@ mod tests {
         let storage = PgStorage::connect(&database_url).await.unwrap();
 
         let email = crate::domain::EmailMessage {
-            message_id: format!("test-search-{}", Uuid::new_v4()),
+            id: None,
+            message_id: format!("test-search-{}", uuid::Uuid::new_v4()),
             thread_id: None,
             in_reply_to: None,
             references: vec![],

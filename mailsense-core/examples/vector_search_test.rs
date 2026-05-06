@@ -23,6 +23,7 @@ async fn main() -> anyhow::Result<()> {
 
     // 3. 準備模擬數據 (Thread: Project Alpha)
     let email1 = EmailMessage {
+        id: None,
         message_id: "example-msg-1-kickoff".to_string(),
         thread_id: None,
         in_reply_to: None,
@@ -36,6 +37,7 @@ async fn main() -> anyhow::Result<()> {
     };
 
     let email2 = EmailMessage {
+        id: None,
         message_id: "example-msg-2-reply".to_string(),
         thread_id: None,
         in_reply_to: Some(email1.message_id.clone()),

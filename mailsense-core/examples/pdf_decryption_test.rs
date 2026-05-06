@@ -51,6 +51,7 @@ async fn main() -> anyhow::Result<()> {
 
     // 3. 準備模擬郵件 (您可以根據實際 PDF 的密碼規則修改這段 Body)
     let email = EmailMessage {
+        id: None,
         message_id: "test-id-pdf-123".to_string(),
         thread_id: None,
         in_reply_to: None,

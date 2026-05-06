@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Attachment {
@@ -17,6 +18,7 @@ pub struct Attachment {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EmailMessage {
+    pub id: Option<Uuid>,
     pub message_id: String,
     pub thread_id: Option<String>,
     pub in_reply_to: Option<String>,

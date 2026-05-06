@@ -230,8 +230,9 @@ impl McpServer {
                     }
 
                     text.push_str(&format!(
-                        "--- \nID: {}\nFrom: {}\nSubject: {}\nDate: {}\nAnalysis:\n{}\nPreview: {}\n\n",
+                        "--- \nMessage-ID: {}\nSystem-ID: {}\nFrom: {}\nSubject: {}\nDate: {}\nAnalysis:\n{}\nPreview: {}\n\n",
                         res.message_id,
+                        res.id.map(|u| u.to_string()).unwrap_or_else(|| "N/A".to_string()),
                         res.from,
                         res.subject,
                         res.date,

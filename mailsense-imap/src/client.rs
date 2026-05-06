@@ -111,6 +111,7 @@ impl ImapClient {
         }
 
         EmailMessage {
+            id: None,
             message_id,
             thread_id: None,
             in_reply_to,

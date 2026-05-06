@@ -22,6 +22,7 @@ async fn main() -> anyhow::Result<()> {
 
     // 3. 準備一封測試郵件
     let email = EmailMessage {
+        id: None,
         message_id: "test-id-123".to_string(),
         thread_id: None,
         in_reply_to: None,

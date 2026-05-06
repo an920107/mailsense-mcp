@@ -307,6 +307,7 @@ mod tests {
         );
 
         let email = EmailMessage {
+            id: None,
             message_id: "test-id".to_string(),
             thread_id: None,
             in_reply_to: None,
@@ -367,6 +368,7 @@ mod tests {
         );
 
         let email = EmailMessage {
+            id: None,
             message_id: "test-id".to_string(),
             thread_id: None,
             in_reply_to: None,
@@ -429,6 +431,7 @@ mod tests {
         );
 
         let email = EmailMessage {
+            id: None,
             message_id: "test-id".to_string(),
             thread_id: None,
             in_reply_to: None,
