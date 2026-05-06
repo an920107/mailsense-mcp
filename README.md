@@ -62,6 +62,19 @@ Workspace:
 - `mailsense-bin`: The executable entry point that wires dependencies together
   (Dependency Injection) and starts the server.
 
+## 🛠️ MCP Tools
+
+MailSense-MCP exposes the following tools to any compatible client:
+
+- **`mailsense_search_emails`**: Search emails using semantic similarity and
+  keywords. Supports filtering by intent (e.g., `ActionRequired`).
+- **`mailsense_get_email`**: Retrieve the full content (body and analysis) of a
+  specific email using its `Message-ID`.
+- **`mailsense_list_attachments`**: List all attachments associated with a
+  `Message-ID`, including their decryption status.
+- **`mailsense_read_attachment`**: Read the content of a specific attachment.
+  Returns text for documents or Base64 for images/PDFs.
+
 ## 🤖 AI Agent Directives
 
 If you are an AI assistant (like Gemini CLI) contributing to this repository,
