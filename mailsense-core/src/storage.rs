@@ -227,6 +227,7 @@ impl StorageProvider for PgStorage {
             use sqlx::Row;
             messages.push(crate::domain::EmailMessage {
                 message_id: row.get("message_id"),
+                thread_id: Some(row.get("thread_id")),
                 in_reply_to: row.get("in_reply_to"),
                 references: row.get("references"),
                 subject: row.get("subject"),

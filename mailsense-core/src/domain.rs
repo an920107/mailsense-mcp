@@ -6,12 +6,24 @@ use uuid::Uuid;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EmailMessage {
     pub message_id: String,
+    pub thread_id: Option<String>,
     pub in_reply_to: Option<String>,
     pub references: Vec<String>,
     pub subject: String,
     pub from: String,
     pub body: String,
     pub date: String,
+}
+
+impl EmailMessage {
+    /// Generates a structured string suitable for embedding, 
+    /// combining key metadata with the body for better context.
+    pub fn to_embedding_text(&self) -> String {
+        format!(
+            "Subject: {}\nFrom: {}\nBody: {}",
+            self.subject, self.from, self.body
+        )
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

@@ -103,6 +103,7 @@ impl EmailProvider for ImapClient {
 
                 result.push(EmailMessage {
                     message_id,
+                    thread_id: None,
                     in_reply_to,
                     references,
                     subject,
