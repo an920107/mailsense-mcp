@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS email_documents (
     from_address TEXT NOT NULL,
     body_text TEXT NOT NULL,
     date TIMESTAMPTZ NOT NULL,
-    embedding vector(768), -- Dimension 768 for Gemini text-embedding-004
+    embedding vector(768), -- Fixed dimension 768 (configured in GeminiClient)
     search_vector tsvector GENERATED ALWAYS AS (
         to_tsvector('english', subject || ' ' || body_text)
     ) STORED,
