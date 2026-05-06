@@ -20,6 +20,9 @@ async fn main() -> anyhow::Result<()> {
 
     // 3. 準備一封測試郵件
     let email = EmailMessage {
+        message_id: "test-id-123".to_string(),
+        in_reply_to: None,
+        references: vec![],
         subject: "Urgent: System Maintenance for Project MailSense".to_string(),
         from: "devops@example.com".to_string(),
         body: r#"

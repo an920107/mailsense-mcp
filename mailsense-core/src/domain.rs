@@ -124,4 +124,7 @@ pub struct EmailAnalysis {
 pub trait LlmProvider: Send + Sync {
     /// Analyzes an email to categorize it, summarize it, and extract potential deadlines and password recipes.
     async fn analyze_email(&self, email: &EmailMessage) -> anyhow::Result<EmailAnalysis>;
+
+    /// Generates a vector embedding for the given text.
+    async fn generate_embedding(&self, text: &str) -> anyhow::Result<Vec<f32>>;
 }
