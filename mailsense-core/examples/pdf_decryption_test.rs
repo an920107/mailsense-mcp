@@ -14,18 +14,28 @@ async fn main() -> anyhow::Result<()> {
     let personal = config
         .personal
         .as_ref()
-        .expect("Personal info missing in .env");
+        .expect("Personal info missing or invalid in .env");
 
     // 檢查是否有傳入 PDF 檔案路徑
     let args: Vec<String> = env::args().collect();
     let pdf_path = args.get(1);
 
     println!("🚀 Testing Full Decryption Pipeline...");
-    println!(
-        "Local ID (Masked): ****{}",
-        &personal.id_number[personal.id_number.len() - 4..]
-    );
-    println!("Local Bday: {}", personal.birthday);
+
+    // 安全地遮罩 ID 與生日 (Comment 3192264175, 3192264138)
+    let masked_id = if personal.id_number.len() >= 4 {
+        format!("****{}", &personal.id_number[personal.id_number.len() - 4..])
+    } else {
+        "****".to_string()
+    };
+    let masked_bday = if personal.birthday.len() >= 4 {
+        format!("****{}", &personal.birthday[personal.birthday.len() - 4..])
+    } else {
+        "****".to_string()
+    };
+
+    println!("Local ID (Masked): {}", masked_id);
+    println!("Local Bday (Masked): {}", masked_bday);
 
     // 2. 初始化 LLM
     let gemini_cfg = config.gemini.as_ref().expect("GEMINI_API_KEY missing");
@@ -50,7 +60,7 @@ async fn main() -> anyhow::Result<()> {
 
     println!("\n📧 Phase 1: LLM Recipe Deduction...");
     let analysis = client.analyze_email(&email).await?;
-    println!("Duced Intent: {:?}", analysis.intent);
+    println!("Deduced Intent: {:?}", analysis.intent); // Fix typo (Comment 3192264184)
     println!("Password Recipes from LLM: {:?}", analysis.password_recipes);
 
     // 4. 根據 LLM 配方組裝密碼池
@@ -80,17 +90,19 @@ async fn main() -> anyhow::Result<()> {
             "Example: cargo run -p mailsense-core --example pdf_decryption_test -- my_locked_file.pdf"
         );
 
-        // 僅驗證密碼池組裝邏輯
-        let expected = format!(
-            "{}{}",
-            &personal.id_number[personal.id_number.len() - 4..],
-            &personal.birthday[4..]
-        );
-        if pool.contains(&expected) {
-            println!(
-                "\n✅ Assembly logic verified: '{}' is in the pool.",
-                expected
+        // 僅驗證密碼池組裝邏輯 (Comment 3192264159)
+        if personal.id_number.len() >= 4 && personal.birthday.len() >= 8 {
+            let expected = format!(
+                "{}{}",
+                &personal.id_number[personal.id_number.len() - 4..],
+                &personal.birthday[4..8]
             );
+            if pool.contains(&expected) {
+                println!(
+                    "\n✅ Assembly logic verified: '****{}' is in the pool.",
+                    &expected[expected.len() - 4..]
+                );
+            }
         }
     }
 
