@@ -155,10 +155,11 @@ impl StorageProvider for PgStorage {
         embedding: Option<Vec<f32>>,
     ) -> anyhow::Result<()> {
         let embedding_vector = embedding.map(pgvector::Vector::from);
-        let date = match chrono::DateTime::parse_from_rfc3339(&email.date) {
-            Ok(dt) => dt.with_timezone(&Utc),
-            Err(_) => Utc::now(), // Fallback
-        };
+
+        // Explicitly handle invalid dates instead of silent fallback to NOW() (Addressing PR 3193688036)
+        let date = chrono::DateTime::parse_from_rfc3339(&email.date)
+            .map(|dt| dt.with_timezone(&Utc))
+            .context("Invalid RFC3339 date format in email.date")?;
 
         sqlx::query(
             r#"
@@ -209,10 +210,15 @@ impl StorageProvider for PgStorage {
             FROM email_documents
             WHERE 
                 search_vector @@ websearch_to_tsquery('english', $1)
-                OR ($2::vector IS NOT NULL)
+                OR ($2::vector IS NOT NULL AND embedding IS NOT NULL)
             ORDER BY 
                 (ts_rank(search_vector, websearch_to_tsquery('english', $1)) * 0.4 + 
-                 (CASE WHEN $2::vector IS NOT NULL THEN (1.0 / (1.0 + (embedding <-> $2))) ELSE 0 END) * 0.6) DESC
+                 COALESCE(
+                    CASE WHEN $2::vector IS NOT NULL AND embedding IS NOT NULL 
+                    THEN (1.0 / (1.0 + (embedding <-> $2))) 
+                    ELSE 0 
+                    END, 0
+                 ) * 0.6) DESC
             LIMIT $3
             "#,
         )
