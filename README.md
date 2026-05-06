@@ -101,15 +101,16 @@ cd mailsense-mcp
 ```
 
 1. **Initialize Database (Podman)**:
-   This project uses PostgreSQL with the `pgvector` extension. We provide a custom Podman setup for easy initialization.
+   This project uses PostgreSQL with the `pgvector` extension. We provide a `Makefile` to automate the custom image build and pod deployment.
 
 ```bash
-# Build the custom Postgres image with pgvector
-podman build -t mailsense-postgres:18 .
-
-# Run the database pod
-podman kube play pod.yaml
+# Build image and start the pod in one command
+make db-up
 ```
+
+Other database commands:
+- `make db-status`: Check if the database is running.
+- `make db-down`: Stop and remove the database pod.
 
 1. **Configure Environment**:
    Copy the example environment file and fill in your credentials.
