@@ -145,6 +145,20 @@ impl McpServer {
                                 "required": ["message_id", "filename"]
                             }),
                         },
+                        Tool {
+                            name: "mailsense_get_email".to_string(),
+                            description: "Retrieve the full content, metadata, and LLM analysis of a specific email by its Message-ID.".to_string(),
+                            input_schema: json!({
+                                "type": "object",
+                                "properties": {
+                                    "message_id": {
+                                        "type": "string",
+                                        "description": "The Message-ID of the email to retrieve"
+                                    }
+                                },
+                                "required": ["message_id"]
+                            }),
+                        },
                     ],
                 };
 
@@ -308,6 +322,43 @@ impl McpServer {
                     Ok(CallToolResult {
                         content: vec![ToolContent::Text {
                             text: format!("Attachment '{}' not found.", filename),
+                        }],
+                        is_error: true,
+                    })
+                }
+            }
+            "mailsense_get_email" => {
+                let message_id = params.arguments["message_id"]
+                    .as_str()
+                    .ok_or_else(|| anyhow::anyhow!("Missing 'message_id' argument"))?;
+
+                let email_opt = self.storage.get_email_by_id(message_id).await?;
+
+                if let Some(res) = email_opt {
+                    let json_res = json!({
+                        "message_id": res.message_id,
+                        "system_id": res.id,
+                        "from": res.from,
+                        "subject": res.subject,
+                        "date": res.date,
+                        "body": res.body,
+                        "analysis": res.analysis.as_ref().map(|a| {
+                            json!({
+                                "intent": a.intent.as_str(),
+                                "summary": a.summary,
+                                "deadlines": a.extracted_deadlines
+                            })
+                        })
+                    });
+
+                    Ok(CallToolResult {
+                        content: vec![ToolContent::Json { json: json_res }],
+                        is_error: false,
+                    })
+                } else {
+                    Ok(CallToolResult {
+                        content: vec![ToolContent::Text {
+                            text: format!("Email with Message-ID '{}' not found.", message_id),
                         }],
                         is_error: true,
                     })
