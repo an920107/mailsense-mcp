@@ -4,6 +4,13 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Attachment {
+    pub filename: String,
+    pub mime_type: String,
+    pub data: Vec<u8>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EmailMessage {
     pub message_id: String,
     pub thread_id: Option<String>,
@@ -13,6 +20,7 @@ pub struct EmailMessage {
     pub from: String,
     pub body: String,
     pub date: String,
+    pub attachments: Vec<Attachment>,
 }
 
 impl EmailMessage {
@@ -153,6 +161,9 @@ pub trait LlmProvider: Send + Sync {
     /// Analyzes an email to categorize it, summarize it, and extract potential deadlines and password recipes.
     async fn analyze_email(&self, email: &EmailMessage) -> anyhow::Result<EmailAnalysis>;
 
-    /// Generates a vector embedding for the given text.
-    async fn generate_embedding(&self, text: &str) -> anyhow::Result<Vec<f32>>;
+    /// Generates a vector embedding for the given email (text + attachments).
+    async fn generate_embedding(&self, email: &EmailMessage) -> anyhow::Result<Vec<f32>>;
+
+    /// Generates a vector embedding for a raw query string.
+    async fn generate_query_embedding(&self, query: &str) -> anyhow::Result<Vec<f32>>;
 }

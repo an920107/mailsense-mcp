@@ -234,6 +234,7 @@ impl StorageProvider for PgStorage {
                 from: row.get("from_address"),
                 body: row.get("body_text"),
                 date: row.get::<chrono::DateTime<Utc>, _>("date").to_rfc3339(),
+                attachments: vec![],
             });
         }
 

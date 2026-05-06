@@ -39,6 +39,7 @@ async fn main() -> anyhow::Result<()> {
         "#
         .to_string(),
         date: "2026-05-04".to_string(),
+        attachments: vec![],
     };
 
     println!("\n📧 Analyzing Email...");

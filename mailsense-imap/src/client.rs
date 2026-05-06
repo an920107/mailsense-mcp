@@ -1,6 +1,7 @@
 use async_imap::Session;
 use async_trait::async_trait;
 use futures::StreamExt;
+use mail_parser::MimeHeaders;
 use mailsense_core::config::ImapConfig;
 use mailsense_core::domain::{EmailMessage, EmailProvider};
 use native_tls::TlsConnector;
@@ -101,6 +102,22 @@ impl EmailProvider for ImapClient {
                     .map(|d| d.to_rfc3339())
                     .unwrap_or_else(|| "Unknown".to_string());
 
+                let mut attachments = Vec::new();
+                for part in parsed.attachments() {
+                    let filename = part
+                        .attachment_name()
+                        .unwrap_or("unnamed_attachment")
+                        .to_string();
+                    let mime_type = part.content_type().map(|ct| ct.ctype().to_string()).unwrap_or_else(|| "application/octet-stream".to_string());
+                    let data = part.contents().to_vec();
+
+                    attachments.push(mailsense_core::domain::Attachment {
+                        filename,
+                        mime_type,
+                        data,
+                    });
+                }
+
                 result.push(EmailMessage {
                     message_id,
                     thread_id: None,
@@ -110,6 +127,7 @@ impl EmailProvider for ImapClient {
                     from,
                     body: body_text,
                     date,
+                    attachments,
                 });
             }
         }

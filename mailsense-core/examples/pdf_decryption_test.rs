@@ -64,6 +64,7 @@ async fn main() -> anyhow::Result<()> {
         "#
         .to_string(),
         date: "2026-05-04T10:00:00Z".to_string(),
+        attachments: vec![],
     };
 
     println!("\n📧 Phase 1: LLM Recipe Deduction...");

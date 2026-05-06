@@ -1,5 +1,5 @@
 use mailsense_core::config::Config;
-use mailsense_core::domain::{EmailMessage, LlmProvider, StorageProvider};
+use mailsense_core::domain::{Attachment, EmailMessage, LlmProvider, StorageProvider};
 use mailsense_core::llm::GeminiClient;
 use mailsense_core::storage::PgStorage;
 use uuid::Uuid;
@@ -34,6 +34,7 @@ async fn main() -> anyhow::Result<()> {
         from: "manager@example.com".to_string(),
         body: "Let's start the new project focused on Rust and MCP integration.".to_string(),
         date: "2026-05-01T10:00:00Z".to_string(),
+        attachments: vec![],
     };
 
     let email2 = EmailMessage {
@@ -43,28 +44,29 @@ async fn main() -> anyhow::Result<()> {
         references: vec![email1.message_id.clone()],
         subject: "Re: Project Alpha Kickoff".to_string(),
         from: "dev@example.com".to_string(),
-        body: "I will setup the basic workspace using Cargo Workspaces.".to_string(),
+        body: "I will setup the basic workspace using Cargo Workspaces. See the design attached.".to_string(),
         date: "2026-05-01T11:00:00Z".to_string(),
+        attachments: vec![Attachment {
+            filename: "architecture.png".to_string(),
+            mime_type: "image/png".to_string(),
+            data: vec![137, 80, 78, 71, 13, 10, 26, 10], // Mock PNG header
+        }],
     };
 
-    let emails = vec![email1, email2];
+    let mut emails = vec![email1];
+    // Add email2 with attachment
+    emails.push(email2);
 
     // 4. 生成 Embedding 並儲存
     println!("\n📥 Phase 1: Embedding & Storage...");
     for email in &emails {
-        print!("Processing: {}... ", email.subject);
-        let embedding_text = email.to_embedding_text();
-        let embedding = client.generate_embedding(&embedding_text).await?;
-
+        print!("Processing: {} (Attachments: {})... ", email.subject, email.attachments.len());
+        let embedding = client.generate_embedding(email).await?;
+        
         // 簡單的 Thread ID 邏輯：根郵件的 ID
-        let thread_id = email
-            .in_reply_to
-            .clone()
-            .unwrap_or(email.message_id.clone());
-
-        storage
-            .store_email_document(email, &thread_id, Some(embedding))
-            .await?;
+        let thread_id = email.in_reply_to.clone().unwrap_or(email.message_id.clone());
+        
+        storage.store_email_document(email, &thread_id, Some(embedding)).await?;
         println!("✅ Stored.");
     }
 
@@ -79,7 +81,7 @@ async fn main() -> anyhow::Result<()> {
 
     for query in test_queries {
         println!("\n--- Query: '{}' ---", query);
-        let query_embedding = client.generate_embedding(query).await?;
+        let query_embedding = client.generate_query_embedding(query).await?;
         let results = storage
             .hybrid_search(query, Some(query_embedding), 5)
             .await?;
