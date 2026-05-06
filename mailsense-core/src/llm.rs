@@ -4,15 +4,22 @@ use serde_json::json;
 pub struct GeminiClient {
     api_key: String,
     model: String,
+    embedding_model: String,
     base_url: String,
     client: reqwest::Client,
 }
 
 impl GeminiClient {
-    pub fn new(api_key: String, model: Option<String>, base_url: Option<String>) -> Self {
+    pub fn new(
+        api_key: String,
+        model: String,
+        embedding_model: String,
+        base_url: Option<String>,
+    ) -> Self {
         Self {
             api_key,
-            model: model.unwrap_or_else(|| "gemini-1.5-flash".to_string()),
+            model,
+            embedding_model,
             base_url: base_url
                 .unwrap_or_else(|| "https://generativelanguage.googleapis.com".to_string()),
             client: reqwest::Client::new(),
@@ -124,12 +131,127 @@ impl LlmProvider for GeminiClient {
         let analysis: EmailAnalysis = serde_json::from_str(text)?;
         Ok(analysis)
     }
+
+    async fn generate_embedding(&self, email: &EmailMessage) -> anyhow::Result<Vec<f32>> {
+        let url = format!(
+            "{}/v1beta/models/{}:embedContent",
+            self.base_url, self.embedding_model
+        );
+
+        let mut parts = vec![json!({ "text": email.to_embedding_text() })];
+
+        // Add attachments if they are supported types
+        use base64::prelude::*;
+        for attachment in &email.attachments {
+            // Gemini embedding supports images and PDFs as multi-modal input
+            if attachment.mime_type.starts_with("image/")
+                || attachment.mime_type == "application/pdf"
+            {
+                parts.push(json!({
+                    "inline_data": {
+                        "mime_type": attachment.mime_type,
+                        "data": BASE64_STANDARD.encode(&attachment.data)
+                    }
+                }));
+            }
+        }
+
+        let body = json!({
+            "model": format!("models/{}", self.embedding_model),
+            "content": {
+                "parts": parts
+            },
+            "output_dimensionality": 768
+        });
+
+        let response = self
+            .client
+            .post(&url)
+            .header("x-goog-api-key", &self.api_key)
+            .json(&body)
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            let error_text = response.text().await?;
+            return Err(anyhow::anyhow!(
+                "Gemini Embedding API error: {}",
+                error_text
+            ));
+        }
+
+        let resp_json: serde_json::Value = response.json().await?;
+        let values = resp_json["embedding"]["values"]
+            .as_array()
+            .ok_or_else(|| anyhow::anyhow!("Invalid embedding response: {:?}", resp_json))?;
+
+        let embedding: Vec<f32> = values
+            .iter()
+            .map(|v| {
+                v.as_f64()
+                    .map(|f| f as f32)
+                    .ok_or_else(|| anyhow::anyhow!("Non-numeric value in embedding: {:?}", v))
+            })
+            .collect::<anyhow::Result<Vec<f32>>>()?;
+
+        Ok(embedding)
+    }
+
+    async fn generate_query_embedding(&self, query: &str) -> anyhow::Result<Vec<f32>> {
+        let url = format!(
+            "{}/v1beta/models/{}:embedContent",
+            self.base_url, self.embedding_model
+        );
+
+        // Applying Gemini 2 recommendation for search queries
+        let task_formatted_query = format!("task: search result | query: {}", query);
+
+        let body = json!({
+            "model": format!("models/{}", self.embedding_model),
+            "content": {
+                "parts": [{ "text": task_formatted_query }]
+            },
+            "output_dimensionality": 768
+        });
+
+        let response = self
+            .client
+            .post(&url)
+            .header("x-goog-api-key", &self.api_key)
+            .json(&body)
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            let error_text = response.text().await?;
+            return Err(anyhow::anyhow!(
+                "Gemini Query Embedding API error: {}",
+                error_text
+            ));
+        }
+
+        let resp_json: serde_json::Value = response.json().await?;
+        let values = resp_json["embedding"]["values"]
+            .as_array()
+            .ok_or_else(|| anyhow::anyhow!("Invalid embedding response: {:?}", resp_json))?;
+
+        let embedding: Vec<f32> = values
+            .iter()
+            .map(|v| {
+                v.as_f64()
+                    .map(|f| f as f32)
+                    .ok_or_else(|| anyhow::anyhow!("Non-numeric value in embedding: {:?}", v))
+            })
+            .collect::<anyhow::Result<Vec<f32>>>()?;
+
+        Ok(embedding)
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::EmailIntent;
+    use crate::domain::{Attachment, EmailIntent};
     use mockito::{Matcher, Server};
 
     #[tokio::test]
@@ -177,13 +299,23 @@ mod tests {
             .create_async()
             .await;
 
-        let client = GeminiClient::new("test-key".to_string(), None, Some(url));
+        let client = GeminiClient::new(
+            "test-key".to_string(),
+            "gemini-1.5-flash".to_string(),
+            "text-embedding-004".to_string(),
+            Some(url),
+        );
 
         let email = EmailMessage {
+            message_id: "test-id".to_string(),
+            thread_id: None,
+            in_reply_to: None,
+            references: vec![],
             subject: "Overdue Invoice".to_string(),
             from: "billing@example.com".to_string(),
             body: "Your invoice is past due. Please pay by May 10th.".to_string(),
             date: "2026-05-04".to_string(),
+            attachments: vec![],
         };
 
         let result = client.analyze_email(&email).await.unwrap();
@@ -196,6 +328,123 @@ mod tests {
         let recipes = result.password_recipes.unwrap();
         assert_eq!(recipes.len(), 1);
         assert_eq!(recipes[0].len(), 2);
+
+        mock.assert_async().await;
+    }
+
+    #[tokio::test]
+    async fn test_gemini_embedding_parsing() {
+        let mut server = Server::new_async().await;
+        let url = server.url();
+
+        let mock_body = json!({
+            "embedding": {
+                "values": [0.1, 0.2, 0.3]
+            }
+        });
+
+        let mock = server
+            .mock("POST", "/v1beta/models/text-embedding-004:embedContent")
+            .match_header("x-goog-api-key", "test-key")
+            .match_body(Matcher::PartialJson(json!({
+                "model": "models/text-embedding-004",
+                "content": {
+                    "parts": [{ "text": "title: hello world | text: From: Unknown\nBody: " }]
+                }
+            })))
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(serde_json::to_string(&mock_body).unwrap())
+            .create_async()
+            .await;
+
+        let client = GeminiClient::new(
+            "test-key".to_string(),
+            "gemini-1.5-flash".to_string(),
+            "text-embedding-004".to_string(),
+            Some(url),
+        );
+
+        let email = EmailMessage {
+            message_id: "test-id".to_string(),
+            thread_id: None,
+            in_reply_to: None,
+            references: vec![],
+            subject: "hello world".to_string(),
+            from: "Unknown".to_string(),
+            body: "".to_string(),
+            date: "2026-05-04".to_string(),
+            attachments: vec![],
+        };
+
+        let result = client.generate_embedding(&email).await.unwrap();
+
+        assert_eq!(result, vec![0.1, 0.2, 0.3]);
+
+        mock.assert_async().await;
+    }
+
+    #[tokio::test]
+    async fn test_gemini_multi_modal_embedding() {
+        let mut server = Server::new_async().await;
+        let url = server.url();
+
+        let mock_body = json!({
+            "embedding": {
+                "values": [0.5, 0.6]
+            }
+        });
+
+        let mock = server
+            .mock("POST", "/v1beta/models/text-embedding-004:embedContent")
+            .match_header("x-goog-api-key", "test-key")
+            .match_body(Matcher::Json(json!({
+                "model": "models/text-embedding-004",
+                "content": {
+                    "parts": [
+                        { "text": "title: img test | text: From: me\nBody: look at this" },
+                        {
+                            "inline_data": {
+                                "mime_type": "image/png",
+                                "data": "AQID" // [1, 2, 3] in base64
+                            }
+                        }
+                    ]
+                },
+                "output_dimensionality": 768
+            })))
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(serde_json::to_string(&mock_body).unwrap())
+            .create_async()
+            .await;
+
+        let client = GeminiClient::new(
+            "test-key".to_string(),
+            "gemini-1.5-flash".to_string(),
+            "text-embedding-004".to_string(),
+            Some(url),
+        );
+
+        let email = EmailMessage {
+            message_id: "test-id".to_string(),
+            thread_id: None,
+            in_reply_to: None,
+            references: vec![],
+            subject: "img test".to_string(),
+            from: "me".to_string(),
+            body: "look at this".to_string(),
+            date: "2026-05-04".to_string(),
+            attachments: vec![Attachment {
+                filename: "test.png".to_string(),
+                mime_type: "image/png".to_string(),
+                data: vec![1, 2, 3],
+            }],
+        };
+
+        let result = client.generate_embedding(&email).await.unwrap();
+
+        assert_eq!(result, vec![0.5, 0.6]);
 
         mock.assert_async().await;
     }

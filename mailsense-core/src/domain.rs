@@ -4,11 +4,34 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Attachment {
+    pub filename: String,
+    pub mime_type: String,
+    pub data: Vec<u8>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EmailMessage {
+    pub message_id: String,
+    pub thread_id: Option<String>,
+    pub in_reply_to: Option<String>,
+    pub references: Vec<String>,
     pub subject: String,
     pub from: String,
     pub body: String,
     pub date: String,
+    pub attachments: Vec<Attachment>,
+}
+
+impl EmailMessage {
+    /// Generates a structured string suitable for embedding,
+    /// following the Gemini 2 recommendation: "title: {title} | text: {content}"
+    pub fn to_embedding_text(&self) -> String {
+        format!(
+            "title: {} | text: From: {}\nBody: {}",
+            self.subject, self.from, self.body
+        )
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -53,6 +76,22 @@ pub trait StorageProvider: Send + Sync {
 
     /// Mark an email as processed.
     async fn mark_email_processed(&self, message_id: &str) -> anyhow::Result<()>;
+
+    /// Store a processed email document with its embedding and threading info.
+    async fn store_email_document(
+        &self,
+        email: &EmailMessage,
+        thread_id: &str,
+        embedding: Option<Vec<f32>>,
+    ) -> anyhow::Result<()>;
+
+    /// Perform a hybrid search using vector similarity and keyword matching.
+    async fn hybrid_search(
+        &self,
+        query_text: &str,
+        query_embedding: Option<Vec<f32>>,
+        limit: u32,
+    ) -> anyhow::Result<Vec<EmailMessage>>;
 
     /// Enqueue a new background task.
     async fn enqueue_task(
@@ -121,4 +160,10 @@ pub struct EmailAnalysis {
 pub trait LlmProvider: Send + Sync {
     /// Analyzes an email to categorize it, summarize it, and extract potential deadlines and password recipes.
     async fn analyze_email(&self, email: &EmailMessage) -> anyhow::Result<EmailAnalysis>;
+
+    /// Generates a vector embedding for the given email (text + attachments).
+    async fn generate_embedding(&self, email: &EmailMessage) -> anyhow::Result<Vec<f32>>;
+
+    /// Generates a vector embedding for a raw query string.
+    async fn generate_query_embedding(&self, query: &str) -> anyhow::Result<Vec<f32>>;
 }

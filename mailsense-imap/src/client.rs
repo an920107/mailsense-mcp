@@ -1,6 +1,7 @@
 use async_imap::Session;
 use async_trait::async_trait;
 use futures::StreamExt;
+use mail_parser::MimeHeaders;
 use mailsense_core::config::ImapConfig;
 use mailsense_core::domain::{EmailMessage, EmailProvider};
 use native_tls::TlsConnector;
@@ -71,6 +72,39 @@ impl EmailProvider for ImapClient {
                 .body()
                 .and_then(|body| mail_parser::MessageParser::new().parse(body))
             {
+                let message_id =
+                    parsed
+                        .message_id()
+                        .map(|id| id.to_string())
+                        .unwrap_or_else(|| {
+                            // Generate deterministic surrogate key if Message-ID is missing
+                            use std::collections::hash_map::DefaultHasher;
+                            use std::hash::{Hash, Hasher};
+                            let mut hasher = DefaultHasher::new();
+                            parsed.subject().hash(&mut hasher);
+                            // Hash individual addresses since mail_parser::Address doesn't implement Hash
+                            if let Some(addresses) = parsed.from().and_then(|f| f.as_list()) {
+                                for addr in addresses {
+                                    addr.address().hash(&mut hasher);
+                                }
+                            }
+
+                            parsed.date().map(|d| d.to_rfc3339()).hash(&mut hasher);
+                            format!("surrogate-{}", hasher.finish())
+                        });
+
+                let in_reply_to = match parsed.in_reply_to() {
+                    mail_parser::HeaderValue::Text(t) => Some(t.to_string()),
+                    _ => None,
+                };
+                let references = match parsed.references() {
+                    mail_parser::HeaderValue::Text(t) => vec![t.to_string()],
+                    mail_parser::HeaderValue::TextList(tl) => {
+                        tl.iter().map(|s| s.to_string()).collect()
+                    }
+                    _ => vec![],
+                };
+
                 let subject = parsed.subject().unwrap_or("No Subject").to_string();
                 let from = parsed
                     .from()
@@ -85,11 +119,35 @@ impl EmailProvider for ImapClient {
                     .map(|d| d.to_rfc3339())
                     .unwrap_or_else(|| "Unknown".to_string());
 
+                let mut attachments = Vec::new();
+                for part in parsed.attachments() {
+                    let filename = part
+                        .attachment_name()
+                        .unwrap_or("unnamed_attachment")
+                        .to_string();
+                    let mime_type = part
+                        .content_type()
+                        .map(|ct| ct.ctype().to_string())
+                        .unwrap_or_else(|| "application/octet-stream".to_string());
+                    let data = part.contents().to_vec();
+
+                    attachments.push(mailsense_core::domain::Attachment {
+                        filename,
+                        mime_type,
+                        data,
+                    });
+                }
+
                 result.push(EmailMessage {
+                    message_id,
+                    thread_id: None,
+                    in_reply_to,
+                    references,
                     subject,
                     from,
                     body: body_text,
                     date,
+                    attachments,
                 });
             }
         }

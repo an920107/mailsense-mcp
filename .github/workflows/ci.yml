@@ -2,13 +2,12 @@ name: CI
 
 on:
   push:
-    branches: [ "main", "release/**" ]
+    branches: ["main", "release/**"]
   pull_request:
-    branches: [ "main", "release/**" ]
+    branches: ["main", "release/**"]
 
 env:
   CARGO_TERM_COLOR: always
-  SQLX_OFFLINE: true
 
 jobs:
   test:
@@ -16,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:16
+        image: pgvector/pgvector:pg18
         env:
           POSTGRES_USER: user
           POSTGRES_PASSWORD: password
@@ -36,6 +35,14 @@ jobs:
 
       - name: Rust Cache
         uses: Swatinem/rust-cache@v2
+
+      - name: Postgres Migration
+        env:
+          DATABASE_URL: postgres://user:password@localhost:5432/mailsense_test
+        run: |
+          cargo install sqlx-cli --no-default-features --features postgres
+          sqlx database create
+          sqlx migrate run
 
       - name: Run Tests (including ignored DB tests)
         env:

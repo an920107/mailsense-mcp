@@ -1,4 +1,5 @@
 use crate::domain::{StorageProvider, Task, TaskStatus};
+use anyhow::Context;
 use async_trait::async_trait;
 use chrono::Utc;
 use sqlx::PgPool;
@@ -147,6 +148,105 @@ impl StorageProvider for PgStorage {
 
         Ok(())
     }
+
+    async fn store_email_document(
+        &self,
+        email: &crate::domain::EmailMessage,
+        thread_id: &str,
+        embedding: Option<Vec<f32>>,
+    ) -> anyhow::Result<()> {
+        let embedding_vector = embedding.map(pgvector::Vector::from);
+
+        // Explicitly handle invalid dates instead of silent fallback to NOW() (Addressing PR 3193688036)
+        let date = chrono::DateTime::parse_from_rfc3339(&email.date)
+            .map(|dt| dt.with_timezone(&Utc))
+            .context("Invalid RFC3339 date format in email.date")?;
+
+        sqlx::query(
+            r#"
+            INSERT INTO email_documents (
+                id, message_id, thread_id, in_reply_to, "references", 
+                subject, from_address, body_text, date, embedding
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            ON CONFLICT (message_id) DO UPDATE SET
+                thread_id = EXCLUDED.thread_id,
+                in_reply_to = EXCLUDED.in_reply_to,
+                "references" = EXCLUDED."references",
+                subject = EXCLUDED.subject,
+                from_address = EXCLUDED.from_address,
+                body_text = EXCLUDED.body_text,
+                date = EXCLUDED.date,
+                embedding = EXCLUDED.embedding
+            "#,
+        )
+        .bind(Uuid::new_v4())
+        .bind(&email.message_id)
+        .bind(thread_id)
+        .bind(&email.in_reply_to)
+        .bind(&email.references)
+        .bind(&email.subject)
+        .bind(&email.from)
+        .bind(&email.body)
+        .bind(date)
+        .bind(embedding_vector)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    async fn hybrid_search(
+        &self,
+        query_text: &str,
+        query_embedding: Option<Vec<f32>>,
+        limit: u32,
+    ) -> anyhow::Result<Vec<crate::domain::EmailMessage>> {
+        let embedding_vector = query_embedding.map(pgvector::Vector::from);
+
+        let rows = sqlx::query(
+            r#"
+            SELECT 
+                message_id, thread_id, in_reply_to, "references", subject, from_address, body_text, date
+            FROM email_documents
+            WHERE 
+                search_vector @@ websearch_to_tsquery('english', $1)
+                OR ($2::vector IS NOT NULL AND embedding IS NOT NULL)
+            ORDER BY 
+                (ts_rank(search_vector, websearch_to_tsquery('english', $1)) * 0.4 + 
+                 COALESCE(
+                    CASE WHEN $2::vector IS NOT NULL AND embedding IS NOT NULL 
+                    THEN (1.0 / (1.0 + (embedding <-> $2))) 
+                    ELSE 0 
+                    END, 0
+                 ) * 0.6) DESC
+            LIMIT $3
+            "#,
+        )
+        .bind(query_text)
+        .bind(embedding_vector)
+        .bind(limit as i64)
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut messages = Vec::new();
+        for row in rows {
+            use sqlx::Row;
+            messages.push(crate::domain::EmailMessage {
+                message_id: row.get("message_id"),
+                thread_id: Some(row.get("thread_id")),
+                in_reply_to: row.get("in_reply_to"),
+                references: row.get("references"),
+                subject: row.get("subject"),
+                from: row.get("from_address"),
+                body: row.get("body_text"),
+                date: row.get::<chrono::DateTime<Utc>, _>("date").to_rfc3339(),
+                attachments: vec![],
+            });
+        }
+
+        Ok(messages)
+    }
 }
 
 #[cfg(test)]
@@ -246,5 +346,63 @@ mod tests {
             .execute(&storage.pool)
             .await
             .unwrap();
+    }
+
+    #[tokio::test]
+    #[ignore]
+    async fn test_email_document_storage_and_hybrid_search() {
+        dotenvy::dotenv().ok();
+        let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+        let storage = PgStorage::connect(&database_url).await.unwrap();
+
+        let email = crate::domain::EmailMessage {
+            message_id: format!("test-search-{}", Uuid::new_v4()),
+            thread_id: None,
+            in_reply_to: None,
+            references: vec![],
+            subject: "Meeting about Rust".to_string(),
+            from: "alice@example.com".to_string(),
+            body: "Let's discuss the new async traits implementation.".to_string(),
+            date: "2026-05-06T10:00:00Z".to_string(),
+            attachments: vec![],
+        };
+
+        // Test Storage (Upsert)
+        storage
+            .store_email_document(&email, "thread-123", None)
+            .await
+            .unwrap();
+
+        // Test Hybrid Search (FTS part)
+        let results = storage
+            .hybrid_search("async traits", None, 5)
+            .await
+            .unwrap();
+        assert!(!results.is_empty());
+        assert_eq!(results[0].subject, "Meeting about Rust");
+
+        // Test Storage with Embedding
+        let dummy_embedding = vec![0.1; 768];
+        storage
+            .store_email_document(&email, "thread-123", Some(dummy_embedding.clone()))
+            .await
+            .unwrap();
+
+        // Test Hybrid Search (Vector part)
+        let results = storage
+            .hybrid_search("rust", Some(dummy_embedding), 5)
+            .await
+            .unwrap();
+        assert!(!results.is_empty());
+        assert_eq!(results[0].message_id, email.message_id);
+
+        // Cleanup
+        sqlx::query!(
+            "DELETE FROM email_documents WHERE message_id = $1",
+            email.message_id
+        )
+        .execute(&storage.pool)
+        .await
+        .unwrap();
     }
 }

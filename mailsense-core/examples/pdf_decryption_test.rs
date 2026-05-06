@@ -44,12 +44,17 @@ async fn main() -> anyhow::Result<()> {
     let gemini_cfg = config.gemini.as_ref().expect("GEMINI_API_KEY missing");
     let client = GeminiClient::new(
         gemini_cfg.api_key.clone(),
-        Some(gemini_cfg.model.clone()),
+        gemini_cfg.model.clone(),
+        gemini_cfg.embedding_model.clone(),
         Some(gemini_cfg.base_url.clone()),
     );
 
     // 3. 準備模擬郵件 (您可以根據實際 PDF 的密碼規則修改這段 Body)
     let email = EmailMessage {
+        message_id: "test-id-pdf-123".to_string(),
+        thread_id: None,
+        in_reply_to: None,
+        references: vec![],
         subject: "Your E-Statement is ready".to_string(),
         from: "bank@example.com".to_string(),
         body: r#"
@@ -59,6 +64,7 @@ async fn main() -> anyhow::Result<()> {
         "#
         .to_string(),
         date: "2026-05-04T10:00:00Z".to_string(),
+        attachments: vec![],
     };
 
     println!("\n📧 Phase 1: LLM Recipe Deduction...");
