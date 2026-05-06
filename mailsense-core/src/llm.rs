@@ -316,6 +316,7 @@ mod tests {
             body: "Your invoice is past due. Please pay by May 10th.".to_string(),
             date: "2026-05-04".to_string(),
             attachments: vec![],
+            analysis: None,
         };
 
         let result = client.analyze_email(&email).await.unwrap();
@@ -375,6 +376,7 @@ mod tests {
             body: "".to_string(),
             date: "2026-05-04".to_string(),
             attachments: vec![],
+            analysis: None,
         };
 
         let result = client.generate_embedding(&email).await.unwrap();
@@ -440,6 +442,7 @@ mod tests {
                 mime_type: "image/png".to_string(),
                 data: vec![1, 2, 3],
             }],
+            analysis: None,
         };
 
         let result = client.generate_embedding(&email).await.unwrap();

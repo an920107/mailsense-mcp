@@ -32,6 +32,7 @@ async fn main() -> anyhow::Result<()> {
         body: "Let's start the new project focused on Rust and MCP integration.".to_string(),
         date: "2026-05-01T10:00:00Z".to_string(),
         attachments: vec![],
+        analysis: None,
     };
 
     let email2 = EmailMessage {
@@ -54,6 +55,7 @@ async fn main() -> anyhow::Result<()> {
                 2, 0, 0, 5, 0, 1, 226, 38, 5, 155, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130,
             ],
         }],
+        analysis: None,
     };
 
     let mut emails = vec![email1];
@@ -84,7 +86,7 @@ async fn main() -> anyhow::Result<()> {
             .unwrap_or(email.message_id.clone());
 
         storage
-            .store_email_document(email, &thread_id, Some(embedding))
+            .store_email_document(email, &thread_id, Some(embedding), None)
             .await?;
 
         // 標記為已處理
@@ -106,7 +108,7 @@ async fn main() -> anyhow::Result<()> {
         println!("\n--- Query: '{}' ---", query);
         let query_embedding = client.generate_query_embedding(query).await?;
         let results = storage
-            .hybrid_search(query, Some(query_embedding), 5)
+            .hybrid_search(query, Some(query_embedding), None, 5)
             .await?;
 
         if results.is_empty() {

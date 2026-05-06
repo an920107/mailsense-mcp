@@ -109,6 +109,7 @@ impl StorageProvider for PgStorage {
                 body: r.body_text,
                 date: r.date.to_rfc3339(),
                 attachments: vec![], // Attachments are not stored in the documents table
+                analysis: None,
             }))
         } else {
             Ok(None)
@@ -187,6 +188,7 @@ impl StorageProvider for PgStorage {
         email: &crate::domain::EmailMessage,
         thread_id: &str,
         embedding: Option<Vec<f32>>,
+        analysis: Option<crate::domain::EmailAnalysis>,
     ) -> anyhow::Result<()> {
         let embedding_vector = embedding.map(pgvector::Vector::from);
 
@@ -195,13 +197,25 @@ impl StorageProvider for PgStorage {
             .map(|dt| dt.with_timezone(&Utc))
             .context("Invalid RFC3339 date format in email.date")?;
 
+        let (summary, intent, deadlines, password_recipes) = if let Some(a) = analysis {
+            (
+                Some(a.summary),
+                Some(a.intent.as_str().to_string()),
+                Some(a.extracted_deadlines),
+                Some(serde_json::to_value(a.password_recipes)?),
+            )
+        } else {
+            (None, None, None, None)
+        };
+
         sqlx::query(
             r#"
             INSERT INTO email_documents (
                 id, message_id, thread_id, in_reply_to, "references", 
-                subject, from_address, body_text, date, embedding
+                subject, from_address, body_text, date, embedding,
+                summary, intent, deadlines, password_recipes
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
             ON CONFLICT (message_id) DO UPDATE SET
                 thread_id = EXCLUDED.thread_id,
                 in_reply_to = EXCLUDED.in_reply_to,
@@ -210,7 +224,11 @@ impl StorageProvider for PgStorage {
                 from_address = EXCLUDED.from_address,
                 body_text = EXCLUDED.body_text,
                 date = EXCLUDED.date,
-                embedding = EXCLUDED.embedding
+                embedding = EXCLUDED.embedding,
+                summary = EXCLUDED.summary,
+                intent = EXCLUDED.intent,
+                deadlines = EXCLUDED.deadlines,
+                password_recipes = EXCLUDED.password_recipes
             "#,
         )
         .bind(Uuid::new_v4())
@@ -223,6 +241,10 @@ impl StorageProvider for PgStorage {
         .bind(&email.body)
         .bind(date)
         .bind(embedding_vector)
+        .bind(summary)
+        .bind(intent)
+        .bind(deadlines)
+        .bind(password_recipes)
         .execute(&self.pool)
         .await?;
 
@@ -233,18 +255,22 @@ impl StorageProvider for PgStorage {
         &self,
         query_text: &str,
         query_embedding: Option<Vec<f32>>,
+        intent: Option<crate::domain::EmailIntent>,
         limit: u32,
     ) -> anyhow::Result<Vec<crate::domain::EmailMessage>> {
         let embedding_vector = query_embedding.map(pgvector::Vector::from);
+        let intent_str = intent.map(|i| i.as_str().to_string());
 
         let rows = sqlx::query(
             r#"
             SELECT 
-                message_id, thread_id, in_reply_to, "references", subject, from_address, body_text, date
+                message_id, thread_id, in_reply_to, "references", subject, from_address, body_text, date,
+                summary, intent, deadlines, password_recipes
             FROM email_documents
             WHERE 
-                search_vector @@ websearch_to_tsquery('english', $1)
-                OR ($2::vector IS NOT NULL AND embedding IS NOT NULL)
+                (search_vector @@ websearch_to_tsquery('english', $1)
+                OR ($2::vector IS NOT NULL AND embedding IS NOT NULL))
+                AND ($4::TEXT IS NULL OR intent = $4)
             ORDER BY 
                 (ts_rank(search_vector, websearch_to_tsquery('english', $1)) * 0.4 + 
                  COALESCE(
@@ -259,12 +285,39 @@ impl StorageProvider for PgStorage {
         .bind(query_text)
         .bind(embedding_vector)
         .bind(limit as i64)
+        .bind(intent_str)
         .fetch_all(&self.pool)
         .await?;
 
         let mut messages = Vec::new();
         for row in rows {
             use sqlx::Row;
+
+            let analysis = if let (Ok(summary), Ok(intent_str)) = (
+                row.try_get::<String, _>("summary"),
+                row.try_get::<String, _>("intent"),
+            ) {
+                let intent = match intent_str.as_str() {
+                    "ActionRequired" => crate::domain::EmailIntent::ActionRequired,
+                    "FYI" => crate::domain::EmailIntent::FYI,
+                    "Update" => crate::domain::EmailIntent::Update,
+                    _ => crate::domain::EmailIntent::Spam,
+                };
+
+                Some(crate::domain::EmailAnalysis {
+                    intent,
+                    tags: vec![], // Tags are not stored separately yet
+                    summary,
+                    extracted_deadlines: row.try_get("deadlines").unwrap_or_default(),
+                    password_recipes: row
+                        .try_get::<serde_json::Value, _>("password_recipes")
+                        .ok()
+                        .and_then(|v| serde_json::from_value(v).ok()),
+                })
+            } else {
+                None
+            };
+
             messages.push(crate::domain::EmailMessage {
                 message_id: row.get("message_id"),
                 thread_id: Some(row.get("thread_id")),
@@ -275,6 +328,7 @@ impl StorageProvider for PgStorage {
                 body: row.get("body_text"),
                 date: row.get::<chrono::DateTime<Utc>, _>("date").to_rfc3339(),
                 attachments: vec![],
+                analysis,
             });
         }
 
@@ -398,17 +452,18 @@ mod tests {
             body: "Let's discuss the new async traits implementation.".to_string(),
             date: "2026-05-06T10:00:00Z".to_string(),
             attachments: vec![],
+            analysis: None,
         };
 
         // Test Storage (Upsert)
         storage
-            .store_email_document(&email, "thread-123", None)
+            .store_email_document(&email, "thread-123", None, None)
             .await
             .unwrap();
 
         // Test Hybrid Search (FTS part)
         let results = storage
-            .hybrid_search("async traits", None, 5)
+            .hybrid_search("async traits", None, None, 5)
             .await
             .unwrap();
         assert!(!results.is_empty());
@@ -417,13 +472,13 @@ mod tests {
         // Test Storage with Embedding
         let dummy_embedding = vec![0.1; 768];
         storage
-            .store_email_document(&email, "thread-123", Some(dummy_embedding.clone()))
+            .store_email_document(&email, "thread-123", Some(dummy_embedding.clone()), None)
             .await
             .unwrap();
 
         // Test Hybrid Search (Vector part)
         let results = storage
-            .hybrid_search("rust", Some(dummy_embedding), 5)
+            .hybrid_search("rust", Some(dummy_embedding), None, 5)
             .await
             .unwrap();
         assert!(!results.is_empty());

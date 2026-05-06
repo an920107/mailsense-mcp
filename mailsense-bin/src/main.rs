@@ -111,7 +111,16 @@ async fn process_emails(
             // 1. Generate multi-modal embedding
             let embedding = llm.generate_embedding(&email).await?;
 
-            // 2. Store document (using surrogate logic for threading if needed)
+            // 2. Perform deep analysis
+            let analysis = match llm.analyze_email(&email).await {
+                Ok(a) => Some(a),
+                Err(e) => {
+                    tracing::warn!("Failed to analyze email {}: {}", email.message_id, e);
+                    None
+                }
+            };
+
+            // 3. Store document
             let thread_id = email
                 .thread_id
                 .as_deref()
@@ -119,10 +128,10 @@ async fn process_emails(
                 .to_string();
 
             storage
-                .store_email_document(&email, &thread_id, Some(embedding))
+                .store_email_document(&email, &thread_id, Some(embedding), analysis)
                 .await?;
 
-            // 3. Mark as processed
+            // 4. Mark as processed
             storage.mark_email_processed(&email.message_id).await?;
 
             processed_count += 1;

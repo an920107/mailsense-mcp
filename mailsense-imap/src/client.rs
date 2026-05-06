@@ -117,6 +117,7 @@ impl ImapClient {
             body: body_text,
             date,
             attachments,
+            analysis: None,
         }
     }
 }

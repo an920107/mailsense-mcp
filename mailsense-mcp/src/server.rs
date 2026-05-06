@@ -91,14 +91,18 @@ impl McpServer {
                 let result = ListToolsResult {
                     tools: vec![
                         Tool {
-                            name: "mailsense_hybrid_search".to_string(),
-                            description: "Search emails using a combination of vector similarity and keyword matching.".to_string(),
+                            name: "mailsense_search_emails".to_string(),
+                            description: "Search emails using semantic similarity and keyword matching, with optional intent filtering. Returns detailed analysis including summaries, deadlines, and password recipes.".to_string(),
                             input_schema: json!({
                                 "type": "object",
                                 "properties": {
                                     "query": {
                                         "type": "string",
                                         "description": "The search query (natural language or keywords)"
+                                    },
+                                    "intent": {
+                                        "type": "string",
+                                        "description": "Optional filter by intent (ActionRequired, FYI, Update, Spam)"
                                     },
                                     "limit": {
                                         "type": "integer",
@@ -107,20 +111,6 @@ impl McpServer {
                                     }
                                 },
                                 "required": ["query"]
-                            }),
-                        },
-                        Tool {
-                            name: "mailsense_analyze_email".to_string(),
-                            description: "Analyze a specific email by its Message-ID to extract intent, summary, deadlines, and password recipes.".to_string(),
-                            input_schema: json!({
-                                "type": "object",
-                                "properties": {
-                                    "message_id": {
-                                        "type": "string",
-                                        "description": "The Message-ID of the email to analyze"
-                                    }
-                                },
-                                "required": ["message_id"]
                             }),
                         },
                     ],
@@ -166,26 +156,60 @@ impl McpServer {
 
     async fn handle_tool_call(&self, params: CallToolParams) -> Result<CallToolResult> {
         match params.name.as_str() {
-            "mailsense_hybrid_search" => {
+            "mailsense_search_emails" => {
                 let query = params.arguments["query"]
                     .as_str()
                     .ok_or_else(|| anyhow::anyhow!("Missing 'query' argument"))?;
                 let limit = params.arguments["limit"].as_u64().unwrap_or(5) as u32;
 
+                let intent = params
+                    .arguments
+                    .get("intent")
+                    .and_then(|i| i.as_str())
+                    .and_then(|s| match s {
+                        "ActionRequired" => {
+                            Some(mailsense_core::domain::EmailIntent::ActionRequired)
+                        }
+                        "FYI" => Some(mailsense_core::domain::EmailIntent::FYI),
+                        "Update" => Some(mailsense_core::domain::EmailIntent::Update),
+                        "Spam" => Some(mailsense_core::domain::EmailIntent::Spam),
+                        _ => None,
+                    });
+
                 let embedding = self.llm.generate_query_embedding(query).await?;
                 let results = self
                     .storage
-                    .hybrid_search(query, Some(embedding), limit)
+                    .hybrid_search(query, Some(embedding), intent, limit)
                     .await?;
 
                 let mut text = format!("Found {} results:\n\n", results.len());
                 for res in results {
+                    let mut analysis_text = String::new();
+                    if let Some(analysis) = &res.analysis {
+                        analysis_text
+                            .push_str(&format!("  [Intent]: {}\n", analysis.intent.as_str()));
+                        analysis_text.push_str(&format!("  [Summary]: {}\n", analysis.summary));
+                        if !analysis.extracted_deadlines.is_empty() {
+                            analysis_text.push_str(&format!(
+                                "  [Deadlines]: {}\n",
+                                analysis.extracted_deadlines.join(", ")
+                            ));
+                        }
+                        if let Some(recipes) = &analysis.password_recipes {
+                            analysis_text.push_str(&format!(
+                                "  [Password Recipes Found]: {}\n",
+                                recipes.len()
+                            ));
+                        }
+                    }
+
                     text.push_str(&format!(
-                        "--- \nID: {}\nFrom: {}\nSubject: {}\nDate: {}\nSummary Preview: {}\n\n",
+                        "--- \nID: {}\nFrom: {}\nSubject: {}\nDate: {}\nAnalysis:\n{}\nPreview: {}\n\n",
                         res.message_id,
                         res.from,
                         res.subject,
                         res.date,
+                        if analysis_text.is_empty() { "  (None)\n".to_string() } else { analysis_text },
                         res.body.chars().take(200).collect::<String>()
                     ));
                 }
@@ -194,38 +218,6 @@ impl McpServer {
                     content: vec![ToolContent::Text { text }],
                     is_error: false,
                 })
-            }
-            "mailsense_analyze_email" => {
-                let message_id = params.arguments["message_id"]
-                    .as_str()
-                    .ok_or_else(|| anyhow::anyhow!("Missing 'message_id' argument"))?;
-
-                let email_opt = self.storage.get_email_by_id(message_id).await?;
-                if let Some(email) = email_opt {
-                    let analysis = self.llm.analyze_email(&email).await?;
-                    let mut text = format!("Analysis for Email: {}\n", email.subject);
-                    text.push_str(&format!("Intent: {}\n", analysis.intent.as_str()));
-                    text.push_str(&format!("Summary: {}\n", analysis.summary));
-                    text.push_str(&format!(
-                        "Deadlines: {}\n",
-                        analysis.extracted_deadlines.join(", ")
-                    ));
-                    if let Some(recipes) = analysis.password_recipes {
-                        text.push_str(&format!("Password Recipes found: {}\n", recipes.len()));
-                    }
-
-                    Ok(CallToolResult {
-                        content: vec![ToolContent::Text { text }],
-                        is_error: false,
-                    })
-                } else {
-                    Ok(CallToolResult {
-                        content: vec![ToolContent::Text {
-                            text: "Email not found.".to_string(),
-                        }],
-                        is_error: true,
-                    })
-                }
             }
             _ => Err(anyhow::anyhow!("Unknown tool: {}", params.name)),
         }

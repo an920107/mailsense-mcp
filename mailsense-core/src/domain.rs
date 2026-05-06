@@ -21,6 +21,7 @@ pub struct EmailMessage {
     pub body: String,
     pub date: String,
     pub attachments: Vec<Attachment>,
+    pub analysis: Option<EmailAnalysis>,
 }
 
 impl EmailMessage {
@@ -86,6 +87,7 @@ pub trait StorageProvider: Send + Sync {
         email: &EmailMessage,
         thread_id: &str,
         embedding: Option<Vec<f32>>,
+        analysis: Option<EmailAnalysis>,
     ) -> anyhow::Result<()>;
 
     /// Perform a hybrid search using vector similarity and keyword matching.
@@ -93,6 +95,7 @@ pub trait StorageProvider: Send + Sync {
         &self,
         query_text: &str,
         query_embedding: Option<Vec<f32>>,
+        intent: Option<EmailIntent>,
         limit: u32,
     ) -> anyhow::Result<Vec<EmailMessage>>;
 
