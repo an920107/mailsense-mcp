@@ -81,7 +81,7 @@ async fn main() -> anyhow::Result<()> {
     });
 
     // 5. Initialize and Run MCP Server
-    let server = McpServer::new("MailSense-MCP", "0.1.0", storage, llm);
+    let server = McpServer::new("MailSense-MCP", env!("CARGO_PKG_VERSION"), storage, llm);
     server.run().await?;
 
     Ok(())
