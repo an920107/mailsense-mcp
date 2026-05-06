@@ -214,35 +214,31 @@ impl McpServer {
                     .hybrid_search(query, Some(embedding), intent, limit)
                     .await?;
 
-                let mut text = format!("Found {} results:\n\n", results.len());
-                for res in results {
-                    let mut analysis_text = String::new();
-                    if let Some(analysis) = &res.analysis {
-                        analysis_text
-                            .push_str(&format!("  [Intent]: {}\n", analysis.intent.as_str()));
-                        analysis_text.push_str(&format!("  [Summary]: {}\n", analysis.summary));
-                        if !analysis.extracted_deadlines.is_empty() {
-                            analysis_text.push_str(&format!(
-                                "  [Deadlines]: {}\n",
-                                analysis.extracted_deadlines.join(", ")
-                            ));
-                        }
-                    }
-
-                    text.push_str(&format!(
-                        "--- \nMessage-ID: {}\nSystem-ID: {}\nFrom: {}\nSubject: {}\nDate: {}\nAnalysis:\n{}\nPreview: {}\n\n",
-                        res.message_id,
-                        res.id.map(|u| u.to_string()).unwrap_or_else(|| "N/A".to_string()),
-                        res.from,
-                        res.subject,
-                        res.date,
-                        if analysis_text.is_empty() { "  (None)\n".to_string() } else { analysis_text },
-                        res.body.chars().take(200).collect::<String>()
-                    ));
-                }
+                let json_results = json!({
+                    "count": results.len(),
+                    "emails": results.iter().map(|res| {
+                        json!({
+                            "message_id": res.message_id,
+                            "system_id": res.id,
+                            "from": res.from,
+                            "subject": res.subject,
+                            "date": res.date,
+                            "analysis": res.analysis.as_ref().map(|a| {
+                                json!({
+                                    "intent": a.intent.as_str(),
+                                    "summary": a.summary,
+                                    "deadlines": a.extracted_deadlines
+                                })
+                            }),
+                            "preview": res.body.chars().take(300).collect::<String>()
+                        })
+                    }).collect::<Vec<_>>()
+                });
 
                 Ok(CallToolResult {
-                    content: vec![ToolContent::Text { text }],
+                    content: vec![ToolContent::Text {
+                        text: serde_json::to_string_pretty(&json_results).unwrap(),
+                    }],
                     is_error: false,
                 })
             }
@@ -256,26 +252,27 @@ impl McpServer {
                     .get_attachments_by_message_id(message_id)
                     .await?;
 
-                let mut text = format!("Found {} attachments:\n\n", attachments.len());
-                for (i, att) in attachments.iter().enumerate() {
-                    let status = if att.is_decrypted {
-                        "Decrypted"
-                    } else if att.is_encrypted {
-                        "Encrypted (Failed)"
-                    } else {
-                        "No Encryption"
-                    };
-                    text.push_str(&format!(
-                        "{}. {} (MIME: {}) - Status: {}\n",
-                        i + 1,
-                        att.filename,
-                        att.mime_type,
-                        status
-                    ));
-                }
+                let json_results = json!({
+                    "count": attachments.len(),
+                    "attachments": attachments.iter().map(|att| {
+                        json!({
+                            "filename": att.filename,
+                            "mime_type": att.mime_type,
+                            "status": if att.is_decrypted {
+                                "Decrypted"
+                            } else if att.is_encrypted {
+                                "Encrypted (Decryption Failed)"
+                            } else {
+                                "No Encryption"
+                            }
+                        })
+                    }).collect::<Vec<_>>()
+                });
 
                 Ok(CallToolResult {
-                    content: vec![ToolContent::Text { text }],
+                    content: vec![ToolContent::Text {
+                        text: serde_json::to_string_pretty(&json_results).unwrap(),
+                    }],
                     is_error: false,
                 })
             }
