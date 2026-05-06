@@ -69,12 +69,18 @@ impl Config {
             });
 
         let personal = std::env::var("USER_ID_NUMBER").ok().and_then(|id_number| {
-            std::env::var("USER_BIRTHDAY")
-                .ok()
-                .map(|birthday| PersonalConfig {
-                    id_number,
-                    birthday,
-                })
+            std::env::var("USER_BIRTHDAY").ok().and_then(|birthday| {
+                // Basic validation: ID needs at least 4 chars, Birthday at least 8 (YYYYMMDD)
+                if id_number.len() >= 4 && birthday.len() >= 8 {
+                    Some(PersonalConfig {
+                        id_number,
+                        birthday,
+                    })
+                } else {
+                    tracing::warn!("Personal config ignored: USER_ID_NUMBER must be >= 4 chars and USER_BIRTHDAY must be >= 8 chars (YYYYMMDD)");
+                    None
+                }
+            })
         });
 
         Ok(Self {
@@ -138,9 +144,15 @@ impl Config {
         });
 
         let personal = map.get("USER_ID_NUMBER").and_then(|id_number| {
-            map.get("USER_BIRTHDAY").map(|birthday| PersonalConfig {
-                id_number: id_number.clone(),
-                birthday: birthday.clone(),
+            map.get("USER_BIRTHDAY").and_then(|birthday| {
+                if id_number.len() >= 4 && birthday.len() >= 8 {
+                    Some(PersonalConfig {
+                        id_number: id_number.clone(),
+                        birthday: birthday.clone(),
+                    })
+                } else {
+                    None
+                }
             })
         });
 
