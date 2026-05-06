@@ -208,6 +208,8 @@ impl StorageProvider for PgStorage {
             (None, None, None, None)
         };
 
+        let mut tx = self.pool.begin().await?;
+
         sqlx::query(
             r#"
             INSERT INTO email_documents (
@@ -245,8 +247,41 @@ impl StorageProvider for PgStorage {
         .bind(intent)
         .bind(deadlines)
         .bind(password_recipes)
-        .execute(&self.pool)
+        .execute(&mut *tx)
         .await?;
+
+        // Persist attachments
+        // First delete existing attachments for this message_id (if any, due to upsert)
+        sqlx::query!(
+            "DELETE FROM email_attachments WHERE message_id = $1",
+            email.message_id
+        )
+        .execute(&mut *tx)
+        .await?;
+
+        for attachment in &email.attachments {
+            sqlx::query!(
+                r#"
+                INSERT INTO email_attachments (
+                    id, message_id, filename, mime_type, data, 
+                    is_encrypted, is_decrypted, decryption_error
+                )
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                "#,
+                Uuid::new_v4(),
+                email.message_id,
+                attachment.filename,
+                attachment.mime_type,
+                attachment.data,
+                attachment.is_encrypted,
+                attachment.is_decrypted,
+                attachment.decryption_error
+            )
+            .execute(&mut *tx)
+            .await?;
+        }
+
+        tx.commit().await?;
 
         Ok(())
     }

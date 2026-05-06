@@ -104,6 +104,9 @@ impl ImapClient {
                 filename,
                 mime_type,
                 data,
+                is_encrypted: false,
+                is_decrypted: false,
+                decryption_error: None,
             });
         }
 

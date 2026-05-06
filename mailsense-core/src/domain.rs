@@ -8,6 +8,12 @@ pub struct Attachment {
     pub filename: String,
     pub mime_type: String,
     pub data: Vec<u8>,
+    #[serde(default)]
+    pub is_encrypted: bool,
+    #[serde(default)]
+    pub is_decrypted: bool,
+    #[serde(default)]
+    pub decryption_error: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

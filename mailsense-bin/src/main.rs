@@ -40,6 +40,7 @@ async fn main() -> anyhow::Result<()> {
     let worker_llm = llm.clone();
     let worker_storage = storage.clone();
     let worker_email = email_provider.clone();
+    let worker_personal_config = Arc::new(config.personal.clone());
 
     tokio::spawn(async move {
         tracing::info!("Background ingestion worker started.");
@@ -61,6 +62,7 @@ async fn main() -> anyhow::Result<()> {
                 worker_email.as_ref(),
                 worker_llm.as_ref(),
                 worker_storage.as_ref(),
+                worker_personal_config.as_ref(),
                 since,
             )
             .await
@@ -91,34 +93,88 @@ async fn run_ingestion_since(
     email_provider: &dyn EmailProvider,
     llm: &dyn LlmProvider,
     storage: &dyn StorageProvider,
+    personal_config: &Option<mailsense_core::config::PersonalConfig>,
     since: DateTime<Utc>,
 ) -> anyhow::Result<usize> {
     let emails = email_provider.fetch_since(since).await?;
-    process_emails(emails, llm, storage).await
+    process_emails(emails, llm, storage, personal_config).await
 }
 
 async fn process_emails(
-    emails: Vec<mailsense_core::domain::EmailMessage>,
+    mut emails: Vec<mailsense_core::domain::EmailMessage>,
     llm: &dyn LlmProvider,
     storage: &dyn StorageProvider,
+    personal_config: &Option<mailsense_core::config::PersonalConfig>,
 ) -> anyhow::Result<usize> {
     let mut processed_count = 0;
 
-    for email in emails {
+    for email in &mut emails {
         if !storage.is_email_processed(&email.message_id).await? {
             tracing::info!("Processing new email: {}", email.subject);
 
             // 1. Generate multi-modal embedding
-            let embedding = llm.generate_embedding(&email).await?;
+            let embedding = llm.generate_embedding(email).await?;
 
             // 2. Perform deep analysis
-            let analysis = match llm.analyze_email(&email).await {
+            let analysis = match llm.analyze_email(email).await {
                 Ok(a) => Some(a),
                 Err(e) => {
                     tracing::warn!("Failed to analyze email {}: {}", email.message_id, e);
                     None
                 }
             };
+
+            // 2.5 Attempt PDF decryption if personal config is present
+            if let Some(cfg) = personal_config {
+                let recipes = analysis.as_ref().and_then(|a| a.password_recipes.as_ref());
+                let builder = mailsense_core::password::PasswordPoolBuilder::new(cfg);
+                let pool = builder.build(email, recipes);
+
+                for attachment in &mut email.attachments {
+                    if attachment.mime_type.to_lowercase() == "application/pdf" {
+                        tracing::info!(
+                            "Attempting to decrypt PDF attachment: {}",
+                            attachment.filename
+                        );
+                        attachment.is_encrypted = true; // Assume encrypted until proven otherwise or check with lopdf
+
+                        // We do a quick check if it's actually encrypted by trying to load it
+                        if let Ok(doc) = lopdf::Document::load_mem(&attachment.data)
+                            && !doc.is_encrypted()
+                        {
+                            attachment.is_encrypted = false;
+                            attachment.is_decrypted = true;
+                            continue;
+                        }
+
+                        match mailsense_core::pdf::decrypt_pdf_with_timeout(&attachment.data, &pool)
+                            .await
+                        {
+                            Ok(Some(decrypted_bytes)) => {
+                                tracing::info!("Successfully decrypted {}", attachment.filename);
+                                attachment.data = decrypted_bytes;
+                                attachment.is_decrypted = true;
+                            }
+                            Ok(None) => {
+                                tracing::warn!(
+                                    "Failed to find correct password for {}",
+                                    attachment.filename
+                                );
+                                attachment.decryption_error =
+                                    Some("Password not found in pool".to_string());
+                            }
+                            Err(e) => {
+                                tracing::error!(
+                                    "Decryption error for {}: {}",
+                                    attachment.filename,
+                                    e
+                                );
+                                attachment.decryption_error = Some(e.to_string());
+                            }
+                        }
+                    }
+                }
+            }
 
             // 3. Store document
             let thread_id = email
@@ -128,7 +184,7 @@ async fn process_emails(
                 .to_string();
 
             storage
-                .store_email_document(&email, &thread_id, Some(embedding), analysis)
+                .store_email_document(email, &thread_id, Some(embedding), analysis)
                 .await?;
 
             // 4. Mark as processed

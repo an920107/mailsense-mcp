@@ -441,6 +441,9 @@ mod tests {
                 filename: "test.png".to_string(),
                 mime_type: "image/png".to_string(),
                 data: vec![1, 2, 3],
+                is_encrypted: false,
+                is_decrypted: false,
+                decryption_error: None,
             }],
             analysis: None,
         };

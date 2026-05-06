@@ -54,6 +54,9 @@ async fn main() -> anyhow::Result<()> {
                 1, 8, 6, 0, 0, 0, 31, 21, 196, 137, 0, 0, 0, 11, 73, 68, 65, 84, 8, 215, 99, 96, 0,
                 2, 0, 0, 5, 0, 1, 226, 38, 5, 155, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130,
             ],
+            is_encrypted: false,
+            is_decrypted: false,
+            decryption_error: None,
         }],
         analysis: None,
     };
