@@ -12,14 +12,14 @@ pub struct GeminiClient {
 impl GeminiClient {
     pub fn new(
         api_key: String,
-        model: Option<String>,
-        embedding_model: Option<String>,
+        model: String,
+        embedding_model: String,
         base_url: Option<String>,
     ) -> Self {
         Self {
             api_key,
-            model: model.unwrap_or_else(|| "gemini-1.5-flash".to_string()),
-            embedding_model: embedding_model.unwrap_or_else(|| "text-embedding-004".to_string()),
+            model,
+            embedding_model,
             base_url: base_url
                 .unwrap_or_else(|| "https://generativelanguage.googleapis.com".to_string()),
             client: reqwest::Client::new(),
@@ -223,7 +223,12 @@ mod tests {
             .create_async()
             .await;
 
-        let client = GeminiClient::new("test-key".to_string(), None, None, Some(url));
+        let client = GeminiClient::new(
+            "test-key".to_string(),
+            "gemini-1.5-flash".to_string(),
+            "text-embedding-004".to_string(),
+            Some(url),
+        );
 
         let email = EmailMessage {
             message_id: "test-id".to_string(),
@@ -279,7 +284,12 @@ mod tests {
             .create_async()
             .await;
 
-        let client = GeminiClient::new("test-key".to_string(), None, None, Some(url));
+        let client = GeminiClient::new(
+            "test-key".to_string(),
+            "gemini-1.5-flash".to_string(),
+            "text-embedding-004".to_string(),
+            Some(url),
+        );
 
         let result = client.generate_embedding("hello world").await.unwrap();
 

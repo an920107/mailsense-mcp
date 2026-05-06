@@ -9,14 +9,16 @@ async fn main() -> anyhow::Result<()> {
 
     let api_key = std::env::var("GEMINI_API_KEY")
         .expect("GEMINI_API_KEY must be set in .env for this example.");
-    let model = std::env::var("GEMINI_MODEL").ok();
+    let model = std::env::var("GEMINI_MODEL").expect("GEMINI_MODEL must be set");
+    let embedding_model =
+        std::env::var("GEMINI_EMBEDDING_MODEL").expect("GEMINI_EMBEDDING_MODEL must be set");
     let base_url = std::env::var("GEMINI_BASE_URL").ok();
 
     println!("🚀 Testing Gemini LLM Integration...");
-    println!("Model: {}", model.as_deref().unwrap_or("gemini-2.0-flash"));
+    println!("Model: {}", model);
 
     // 2. 初始化 Gemini 客戶端
-    let client = GeminiClient::new(api_key, model, None, base_url);
+    let client = GeminiClient::new(api_key, model, embedding_model, base_url);
 
     // 3. 準備一封測試郵件
     let email = EmailMessage {

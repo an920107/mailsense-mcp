@@ -44,8 +44,8 @@ async fn main() -> anyhow::Result<()> {
     let gemini_cfg = config.gemini.as_ref().expect("GEMINI_API_KEY missing");
     let client = GeminiClient::new(
         gemini_cfg.api_key.clone(),
-        Some(gemini_cfg.model.clone()),
-        Some(gemini_cfg.embedding_model.clone()),
+        gemini_cfg.model.clone(),
+        gemini_cfg.embedding_model.clone(),
         Some(gemini_cfg.base_url.clone()),
     );
 

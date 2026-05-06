@@ -16,8 +16,8 @@ async fn main() -> anyhow::Result<()> {
     // 2. 初始化組件
     let client = GeminiClient::new(
         gemini_cfg.api_key.clone(),
-        Some(gemini_cfg.model.clone()),
-        Some(gemini_cfg.embedding_model.clone()),
+        gemini_cfg.model.clone(),
+        gemini_cfg.embedding_model.clone(),
         Some(gemini_cfg.base_url.clone()),
     );
     let storage = PgStorage::connect(&database_url).await?;
