@@ -35,6 +35,8 @@ async fn main() -> anyhow::Result<()> {
         gemini_cfg.model.clone(),
         gemini_cfg.embedding_model.clone(),
         Some(gemini_cfg.base_url.clone()),
+        gemini_cfg.max_attachment_size,
+        gemini_cfg.max_multimodal_parts,
     ));
 
     let storage = Arc::new(PgStorage::connect(&config.database_url).await?);

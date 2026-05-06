@@ -47,6 +47,8 @@ async fn main() -> anyhow::Result<()> {
         gemini_cfg.model.clone(),
         gemini_cfg.embedding_model.clone(),
         Some(gemini_cfg.base_url.clone()),
+        5 * 1024 * 1024,
+        3,
     );
 
     // 3. 準備模擬郵件 (您可以根據實際 PDF 的密碼規則修改這段 Body)

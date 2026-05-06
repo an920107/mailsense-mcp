@@ -6,6 +6,8 @@ pub struct GeminiClient {
     model: String,
     embedding_model: String,
     base_url: String,
+    max_attachment_size: usize,
+    max_multimodal_parts: usize,
     client: reqwest::Client,
 }
 
@@ -15,6 +17,8 @@ impl GeminiClient {
         model: String,
         embedding_model: String,
         base_url: Option<String>,
+        max_attachment_size: usize,
+        max_multimodal_parts: usize,
     ) -> Self {
         Self {
             api_key,
@@ -22,6 +26,8 @@ impl GeminiClient {
             embedding_model,
             base_url: base_url
                 .unwrap_or_else(|| "https://generativelanguage.googleapis.com".to_string()),
+            max_attachment_size,
+            max_multimodal_parts,
             client: reqwest::Client::new(),
         }
     }
@@ -41,7 +47,39 @@ impl LlmProvider for GeminiClient {
 
         // Add attachments if they are supported types (Multi-modal Analysis)
         use base64::prelude::*;
+        let mut multimodal_count = 0;
         for attachment in &email.attachments {
+            if multimodal_count >= self.max_multimodal_parts {
+                tracing::warn!(
+                    "Skipping attachment {} for analysis: limit of {} reached",
+                    attachment.filename,
+                    self.max_multimodal_parts
+                );
+                continue;
+            }
+
+            if attachment.data.len() > self.max_attachment_size {
+                tracing::warn!(
+                    "Skipping attachment {} for analysis: size {} exceeds limit of {}MB",
+                    attachment.filename,
+                    attachment.data.len(),
+                    self.max_attachment_size / 1024 / 1024
+                );
+                continue;
+            }
+
+            // Skip encrypted PDFs for analysis as they can't be read by LLM
+            if attachment.mime_type == "application/pdf"
+                && attachment.is_encrypted
+                && !attachment.is_decrypted
+            {
+                tracing::debug!(
+                    "Skipping encrypted PDF {} for analysis",
+                    attachment.filename
+                );
+                continue;
+            }
+
             if attachment.mime_type.starts_with("image/")
                 || attachment.mime_type == "application/pdf"
             {
@@ -51,6 +89,7 @@ impl LlmProvider for GeminiClient {
                         "data": BASE64_STANDARD.encode(&attachment.data)
                     }
                 }));
+                multimodal_count += 1;
             }
         }
 
@@ -159,7 +198,39 @@ impl LlmProvider for GeminiClient {
 
         // Add attachments if they are supported types
         use base64::prelude::*;
+        let mut multimodal_count = 0;
         for attachment in &email.attachments {
+            if multimodal_count >= self.max_multimodal_parts {
+                tracing::warn!(
+                    "Skipping attachment {} for embedding: limit of {} reached",
+                    attachment.filename,
+                    self.max_multimodal_parts
+                );
+                continue;
+            }
+
+            if attachment.data.len() > self.max_attachment_size {
+                tracing::warn!(
+                    "Skipping attachment {} for embedding: size {} exceeds limit of {}MB",
+                    attachment.filename,
+                    attachment.data.len(),
+                    self.max_attachment_size / 1024 / 1024
+                );
+                continue;
+            }
+
+            // Skip encrypted PDFs for embedding
+            if attachment.mime_type == "application/pdf"
+                && attachment.is_encrypted
+                && !attachment.is_decrypted
+            {
+                tracing::debug!(
+                    "Skipping encrypted PDF {} for embedding",
+                    attachment.filename
+                );
+                continue;
+            }
+
             // Gemini embedding supports images and PDFs as multi-modal input
             if attachment.mime_type.starts_with("image/")
                 || attachment.mime_type == "application/pdf"
@@ -170,6 +241,7 @@ impl LlmProvider for GeminiClient {
                         "data": BASE64_STANDARD.encode(&attachment.data)
                     }
                 }));
+                multimodal_count += 1;
             }
         }
 
@@ -321,6 +393,8 @@ mod tests {
             "gemini-1.5-flash".to_string(),
             "text-embedding-004".to_string(),
             Some(url),
+            5 * 1024 * 1024,
+            3,
         );
 
         let email = EmailMessage {
@@ -382,6 +456,8 @@ mod tests {
             "gemini-1.5-flash".to_string(),
             "text-embedding-004".to_string(),
             Some(url),
+            5 * 1024 * 1024,
+            3,
         );
 
         let email = EmailMessage {
@@ -445,6 +521,8 @@ mod tests {
             "gemini-1.5-flash".to_string(),
             "text-embedding-004".to_string(),
             Some(url),
+            5 * 1024 * 1024,
+            3,
         );
 
         let email = EmailMessage {

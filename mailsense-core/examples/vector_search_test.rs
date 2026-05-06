@@ -16,7 +16,14 @@ async fn main() -> anyhow::Result<()> {
     let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL missing");
 
     // 2. 初始化組件
-    let client = GeminiClient::new(api_key, model, embedding_model, Some(base_url));
+    let client = GeminiClient::new(
+        api_key,
+        model,
+        embedding_model,
+        Some(base_url),
+        5 * 1024 * 1024,
+        3,
+    );
     let storage = PgStorage::connect(&database_url).await?;
 
     println!("🚀 Testing Vector Search & Threading Pipeline...");

@@ -27,6 +27,8 @@ pub struct GeminiConfig {
     pub model: String,
     pub embedding_model: String,
     pub base_url: String,
+    pub max_attachment_size: usize,
+    pub max_multimodal_parts: usize,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -74,6 +76,14 @@ impl Config {
                     base_url: std::env::var("GEMINI_BASE_URL").unwrap_or_else(|_| {
                         "https://generativelanguage.googleapis.com".to_string()
                     }),
+                    max_attachment_size: std::env::var("GEMINI_MAX_ATTACHMENT_SIZE")
+                        .unwrap_or_else(|_| (5 * 1024 * 1024).to_string())
+                        .parse()
+                        .context("GEMINI_MAX_ATTACHMENT_SIZE must be a number")?,
+                    max_multimodal_parts: std::env::var("GEMINI_MAX_MULTIMODAL_PARTS")
+                        .unwrap_or_else(|_| 3.to_string())
+                        .parse()
+                        .context("GEMINI_MAX_MULTIMODAL_PARTS must be a number")?,
                 })
             })
             .transpose()?;
@@ -169,6 +179,14 @@ impl Config {
                         base_url: map.get("GEMINI_BASE_URL").cloned().unwrap_or_else(|| {
                             "https://generativelanguage.googleapis.com".to_string()
                         }),
+                        max_attachment_size: map
+                            .get("GEMINI_MAX_ATTACHMENT_SIZE")
+                            .and_then(|v| v.parse().ok())
+                            .unwrap_or(5 * 1024 * 1024),
+                        max_multimodal_parts: map
+                            .get("GEMINI_MAX_MULTIMODAL_PARTS")
+                            .and_then(|v| v.parse().ok())
+                            .unwrap_or(3),
                     })
                 })
                 .transpose()?;
