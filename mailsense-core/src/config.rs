@@ -69,8 +69,9 @@ impl Config {
                     embedding_model: std::env::var("GEMINI_EMBEDDING_MODEL").context(
                         "GEMINI_EMBEDDING_MODEL must be set when GEMINI_API_KEY is present",
                     )?,
-                    base_url: std::env::var("GEMINI_BASE_URL")
-                        .unwrap_or_else(|_| "https://generativelanguage.googleapis.com".to_string()),
+                    base_url: std::env::var("GEMINI_BASE_URL").unwrap_or_else(|_| {
+                        "https://generativelanguage.googleapis.com".to_string()
+                    }),
                 })
             })
             .transpose()?;
@@ -138,26 +139,25 @@ impl Config {
                 .context("IMAP_TLS_ENABLED must be true or false")?,
         };
 
-        let gemini = map
-            .get("GEMINI_API_KEY")
-            .map(|api_key| -> anyhow::Result<GeminiConfig> {
-                Ok(GeminiConfig {
-                    api_key: api_key.clone(),
-                    model: map
-                        .get("GEMINI_MODEL")
-                        .cloned()
-                        .context("GEMINI_MODEL must be set")?,
-                    embedding_model: map
-                        .get("GEMINI_EMBEDDING_MODEL")
-                        .cloned()
-                        .context("GEMINI_EMBEDDING_MODEL must be set")?,
-                    base_url: map
-                        .get("GEMINI_BASE_URL")
-                        .cloned()
-                        .unwrap_or_else(|| "https://generativelanguage.googleapis.com".to_string()),
+        let gemini =
+            map.get("GEMINI_API_KEY")
+                .map(|api_key| -> anyhow::Result<GeminiConfig> {
+                    Ok(GeminiConfig {
+                        api_key: api_key.clone(),
+                        model: map
+                            .get("GEMINI_MODEL")
+                            .cloned()
+                            .context("GEMINI_MODEL must be set")?,
+                        embedding_model: map
+                            .get("GEMINI_EMBEDDING_MODEL")
+                            .cloned()
+                            .context("GEMINI_EMBEDDING_MODEL must be set")?,
+                        base_url: map.get("GEMINI_BASE_URL").cloned().unwrap_or_else(|| {
+                            "https://generativelanguage.googleapis.com".to_string()
+                        }),
+                    })
                 })
-            })
-            .transpose()?;
+                .transpose()?;
 
         let personal = map.get("USER_ID_NUMBER").and_then(|id_number| {
             map.get("USER_BIRTHDAY").and_then(|birthday| {
@@ -203,6 +203,10 @@ mod tests {
         map.insert("GEMINI_API_KEY".to_string(), "gemini-key".to_string());
         map.insert("GEMINI_MODEL".to_string(), "gemini-1.5-pro".to_string());
         map.insert(
+            "GEMINI_EMBEDDING_MODEL".to_string(),
+            "gemini-embedding-1.5-pro".to_string(),
+        );
+        map.insert(
             "GEMINI_BASE_URL".to_string(),
             "https://example.com".to_string(),
         );
@@ -221,6 +225,7 @@ mod tests {
         let gemini = config.gemini.expect("Gemini config should be present");
         assert_eq!(gemini.api_key, "gemini-key");
         assert_eq!(gemini.model, "gemini-1.5-pro");
+        assert_eq!(gemini.embedding_model, "gemini-embedding-1.5-pro");
         assert_eq!(gemini.base_url, "https://example.com");
 
         let personal = config.personal.expect("Personal config should be present");
