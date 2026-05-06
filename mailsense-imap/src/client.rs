@@ -96,7 +96,7 @@ impl ImapClient {
                 .to_string();
             let mime_type = part
                 .content_type()
-                .map(|ct| ct.ctype().to_string())
+                .map(|ct| format!("{}/{}", ct.ctype(), ct.subtype().unwrap_or("*")))
                 .unwrap_or_else(|| "application/octet-stream".to_string());
             let data = part.contents().to_vec();
 
