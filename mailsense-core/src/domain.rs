@@ -25,10 +25,10 @@ pub struct EmailMessage {
 
 impl EmailMessage {
     /// Generates a structured string suitable for embedding, 
-    /// combining key metadata with the body for better context.
+    /// following the Gemini 2 recommendation: "title: {title} | text: {content}"
     pub fn to_embedding_text(&self) -> String {
         format!(
-            "Subject: {}\nFrom: {}\nBody: {}",
+            "title: {} | text: From: {}\nBody: {}",
             self.subject, self.from, self.body
         )
     }

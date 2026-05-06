@@ -199,10 +199,13 @@ impl LlmProvider for GeminiClient {
             self.base_url, self.embedding_model
         );
 
+        // Applying Gemini 2 recommendation for search queries
+        let task_formatted_query = format!("task: search result | query: {}", query);
+
         let body = json!({
             "model": format!("models/{}", self.embedding_model),
             "content": {
-                "parts": [{ "text": query }]
+                "parts": [{ "text": task_formatted_query }]
             },
             "output_dimensionality": 768
         });
@@ -338,7 +341,7 @@ mod tests {
             .match_body(Matcher::PartialJson(json!({
                 "model": "models/text-embedding-004",
                 "content": {
-                    "parts": [{ "text": "Subject: hello world\nFrom: Unknown\nBody: " }]
+                    "parts": [{ "text": "title: hello world | text: From: Unknown\nBody: " }]
                 }
             })))
             .with_status(200)
@@ -391,7 +394,7 @@ mod tests {
                 "model": "models/text-embedding-004",
                 "content": {
                     "parts": [
-                        { "text": "Subject: img test\nFrom: me\nBody: look at this" },
+                        { "text": "title: img test | text: From: me\nBody: look at this" },
                         {
                             "inline_data": {
                                 "mime_type": "image/png",
