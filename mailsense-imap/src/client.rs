@@ -1,7 +1,6 @@
 use async_imap::Session;
 use async_trait::async_trait;
 use futures::StreamExt;
-use mail_parser::MimeHeaders;
 use mailsense_core::config::ImapConfig;
 use mailsense_core::domain::{EmailMessage, EmailProvider};
 use native_tls::TlsConnector;
