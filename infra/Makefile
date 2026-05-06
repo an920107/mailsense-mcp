@@ -1,6 +1,6 @@
 # Makefile for MailSense-MCP Infrastructure
 
-IMAGE_NAME = mailsense-postgres:18
+IMAGE_NAME = mailsense-postgres:17
 POD_FILE = pod.yaml
 
 .PHONY: help db-up db-down db-status
