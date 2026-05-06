@@ -37,6 +37,23 @@ impl LlmProvider for GeminiClient {
 
         let prompt = crate::prompt::generate_analysis_prompt(email);
 
+        let mut parts = vec![json!({ "text": prompt })];
+
+        // Add attachments if they are supported types (Multi-modal Analysis)
+        use base64::prelude::*;
+        for attachment in &email.attachments {
+            if attachment.mime_type.starts_with("image/")
+                || attachment.mime_type == "application/pdf"
+            {
+                parts.push(json!({
+                    "inline_data": {
+                        "mime_type": attachment.mime_type,
+                        "data": BASE64_STANDARD.encode(&attachment.data)
+                    }
+                }));
+            }
+        }
+
         let schema = json!({
             "type": "OBJECT",
             "properties": {
@@ -99,7 +116,7 @@ impl LlmProvider for GeminiClient {
 
         let body = json!({
             "contents": [{
-                "parts": [{ "text": prompt }]
+                "parts": parts
             }],
             "generationConfig": {
                 "response_mime_type": "application/json",
