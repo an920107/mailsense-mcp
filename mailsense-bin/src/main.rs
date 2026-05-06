@@ -43,46 +43,36 @@ async fn main() -> anyhow::Result<()> {
 
     tokio::spawn(async move {
         tracing::info!("Background ingestion worker started.");
-        let mut is_first_run = true;
         let initial_days = config.ingestion_initial_days;
         let interval_mins = config.ingestion_interval_minutes;
 
         loop {
-            if is_first_run {
-                tracing::info!("Starting initial ingestion (last {} days)...", initial_days);
-                let since = Utc::now() - Duration::from_secs(initial_days as u64 * 24 * 3600);
-                match run_ingestion_since(
-                    worker_email.as_ref(),
-                    worker_llm.as_ref(),
-                    worker_storage.as_ref(),
-                    since,
-                )
-                .await
-                {
-                    Ok(count) => {
-                        tracing::info!("Initial ingestion complete. Processed {} emails.", count);
-                        is_first_run = false;
+            // We always fetch emails since a calculated window to ensure no loss.
+            // Even if 100+ emails arrive in 15 mins, they will all be captured.
+            // The is_email_processed guard in process_emails handles deduplication.
+            let since = Utc::now() - Duration::from_secs(initial_days as u64 * 24 * 3600);
+
+            tracing::info!(
+                "Starting ingestion window (since {})...",
+                since.format("%Y-%m-%d")
+            );
+
+            match run_ingestion_since(
+                worker_email.as_ref(),
+                worker_llm.as_ref(),
+                worker_storage.as_ref(),
+                since,
+            )
+            .await
+            {
+                Ok(count) => {
+                    if count > 0 {
+                        tracing::info!("Ingestion complete. Processed {} new emails.", count);
+                    } else {
+                        tracing::debug!("Ingestion complete. No new emails found.");
                     }
-                    Err(e) => tracing::error!("Initial ingestion error: {}", e),
                 }
-            } else {
-                tracing::info!("Starting scheduled ingestion...");
-                match run_ingestion_recent(
-                    worker_email.as_ref(),
-                    worker_llm.as_ref(),
-                    worker_storage.as_ref(),
-                    50,
-                )
-                .await
-                {
-                    Ok(count) => {
-                        tracing::info!(
-                            "Scheduled ingestion complete. Processed {} new emails.",
-                            count
-                        )
-                    }
-                    Err(e) => tracing::error!("Ingestion worker error: {}", e),
-                }
+                Err(e) => tracing::error!("Ingestion error: {}", e),
             }
 
             tracing::info!("Next ingestion in {} minutes.", interval_mins);
@@ -104,16 +94,6 @@ async fn run_ingestion_since(
     since: DateTime<Utc>,
 ) -> anyhow::Result<usize> {
     let emails = email_provider.fetch_since(since).await?;
-    process_emails(emails, llm, storage).await
-}
-
-async fn run_ingestion_recent(
-    email_provider: &dyn EmailProvider,
-    llm: &dyn LlmProvider,
-    storage: &dyn StorageProvider,
-    limit: u32,
-) -> anyhow::Result<usize> {
-    let emails = email_provider.fetch_recent(limit).await?;
     process_emails(emails, llm, storage).await
 }
 
